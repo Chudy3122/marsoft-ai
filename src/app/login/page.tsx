@@ -1,126 +1,350 @@
-// src/app/login/page.tsx
 'use client';
 
-import { FormEvent, useState } from 'react';
+// src/app/login/page.tsx
+import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import React from 'react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const router = useRouter();
 
-  async function handleSubmit(e: FormEvent) {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setDebugInfo(null);
 
+    console.log("Próba logowania:", { email, password: '********' });
+    
     try {
+      // Bezpośrednie logowanie przez NextAuth
       const result = await signIn('credentials', {
         redirect: false,
         email,
-        password
+        password,
+        callbackUrl: '/'
       });
 
+      console.log("Rezultat logowania:", result);
+      setDebugInfo(result);
+      
       if (result?.error) {
-        setError('Nieprawidłowy email lub hasło');
+        console.error("Błąd logowania:", result.error);
+        setError(`Nieprawidłowy login lub hasło (${result.error})`);
         setLoading(false);
-        return;
+      } else if (result?.url) {
+        console.log("Logowanie udane, przekierowanie do:", result.url);
+        router.push(result.url);
+      } else {
+        console.log("Logowanie udane, przekierowanie do strony głównej");
+        router.push('/');
       }
-
-      // Przekierowanie na stronę główną
-      router.push('/');
-      router.refresh();
     } catch (error) {
-      setError('Wystąpił błąd podczas próby logowania');
+      console.error('Błąd podczas logowania:', error);
+      setError(`Wystąpił problem z logowaniem: ${error instanceof Error ? error.message : String(error)}`);
+      setDebugInfo({ error: String(error) });
       setLoading(false);
     }
-  }
+  };
+
+  // Funkcja do szybkiego wypełnienia danych testowych
+  const fillTestCredentials = (userType: 'admin' | 'user') => {
+    if (userType === 'admin') {
+      setEmail('admin@marsoft.pl');
+      setPassword('admin123');
+    } else {
+      setEmail('user@marsoft.pl');
+      setPassword('test123');
+    }
+  };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md space-y-8 rounded-lg bg-white p-8 shadow-md">
-        <div className="flex flex-col items-center justify-center">
-          <div className="relative h-20 w-20">
-            <Image
-              src="/MarsoftAI.png"
-              alt="MarsoftAI Logo"
-              fill
-              style={{ objectFit: 'contain' }}
-              priority
-            />
+    <div style={{ 
+      display: 'flex', 
+      minHeight: '100vh',
+      backgroundColor: '#f9f9f9',
+      flexDirection: 'column'  // Zmieniamy na kolumnę na małych ekranach
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        flex: 1,
+        flexWrap: 'wrap'  // Pozwala na zawijanie na mniejszych ekranach
+      }}>
+        {/* Lewa kolumna z formularzem */}
+        <div style={{ 
+          flex: '1',
+          minWidth: '300px',  // Minimalna szerokość
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          padding: '2rem'
+        }}>
+          <div style={{ 
+            maxWidth: '400px',
+            margin: '0 auto',
+            width: '100%'
+          }}>
+            <h1 style={{ 
+              fontSize: '28px',
+              fontWeight: '600',
+              marginBottom: '8px',
+              color: '#333d3d'
+            }}>
+              Zaloguj się do MarsoftAI
+            </h1>
+            <p style={{ 
+              fontSize: '16px',
+              color: '#6b7280',
+              marginBottom: '24px'
+            }}>
+              Asystent dla projektów UE
+            </p>
+
+            {error && (
+              <div style={{ 
+                padding: '12px',
+                backgroundColor: '#fee2e2',
+                borderRadius: '6px',
+                color: '#b91c1c',
+                marginBottom: '16px'
+              }}>
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom: '16px' }}>
+                <label 
+                  htmlFor="email" 
+                  style={{ 
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    marginBottom: '6px',
+                    color: '#4b5563'
+                  }}
+                >
+                  Adres Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Twój email"
+                  required
+                  style={{ 
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #d1d5db',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label 
+                  htmlFor="password" 
+                  style={{ 
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    marginBottom: '6px',
+                    color: '#4b5563'
+                  }}
+                >
+                  Hasło
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Twoje hasło"
+                  required
+                  style={{ 
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #d1d5db',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+
+              <div style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <input
+                    id="remember"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <label htmlFor="remember" style={{ fontSize: '14px', color: '#4b5563' }}>
+                    Zapamiętaj mnie
+                  </label>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ 
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: '#a3cd39',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '16px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  opacity: loading ? 0.7 : 1,
+                  transition: 'opacity 0.2s',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                {loading ? 'Logowanie...' : 'Zaloguj się'}
+              </button>
+            </form>
+
+            <div style={{ 
+              marginTop: '24px',
+              padding: '16px',
+              backgroundColor: '#f3f4f6',
+              borderRadius: '6px',
+              fontSize: '14px',
+              color: '#4b5563'
+            }}>
+              <p style={{ marginBottom: '8px', fontWeight: '500' }}>
+                Dane testowe:
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => fillTestCredentials('admin')}
+                  style={{
+                    padding: '5px 10px',
+                    backgroundColor: '#e5e7eb',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  admin@marsoft.pl / admin123
+                </button>
+                <button
+                  onClick={() => fillTestCredentials('user')}
+                  style={{
+                    padding: '5px 10px',
+                    backgroundColor: '#e5e7eb',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  user@marsoft.pl / test123
+                </button>
+              </div>
+            </div>
+
+            {/* Obszar informacji debugowania - pomocny przy rozwiązywaniu problemów */}
+            {debugInfo && (
+              <div style={{ 
+                marginTop: '24px',
+                padding: '16px',
+                backgroundColor: '#f0f9ff',
+                borderRadius: '6px',
+                fontSize: '14px',
+                color: '#0369a1'
+              }}>
+                <p style={{ marginBottom: '8px', fontWeight: '500' }}>
+                  Informacje diagnostyczne:
+                </p>
+                <pre style={{ 
+                  whiteSpace: 'pre-wrap', 
+                  wordBreak: 'break-all',
+                  fontSize: '12px',
+                  backgroundColor: '#f8fafc',
+                  padding: '8px',
+                  borderRadius: '4px',
+                  border: '1px solid #e0f2fe',
+                  maxHeight: '150px',
+                  overflow: 'auto'
+                }}>
+                  {JSON.stringify(debugInfo, null, 2)}
+                </pre>
+              </div>
+            )}
           </div>
-          <h2 className="mt-4 text-center text-3xl font-bold text-gray-900">
-            Zaloguj się do MarsoftAI
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Asystent dla projektów UE
-          </p>
         </div>
 
-        {error && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="-space-y-px rounded-md shadow-sm">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Adres Email
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="relative block w-full rounded-t-md border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-green-600"
-                placeholder="Adres Email"
+        {/* Prawa kolumna z logo i grafiką */}
+        <div style={{ 
+          flex: '1',
+          minWidth: '300px',  // Minimalna szerokość
+          backgroundColor: 'white',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '2rem',
+          position: 'relative'
+        }}>
+          <div style={{ 
+            maxWidth: '400px',
+            textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '300px',
+              height: '300px',
+              position: 'relative',
+              margin: '0 auto 24px auto'
+            }}>
+              <Image
+                src="/MarsoftAI.png"
+                alt="MarsoftAI Logo"
+                fill
+                style={{ objectFit: 'contain' }}
+                priority
               />
             </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Hasło
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="relative block w-full rounded-b-md border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-green-600"
-                placeholder="Hasło"
-              />
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative flex w-full justify-center rounded-md bg-green-600 px-3 py-3 text-sm font-semibold text-white hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:bg-green-300"
-            >
-              {loading ? 'Logowanie...' : 'Zaloguj się'}
-            </button>
-          </div>
-
-          <div className="text-center text-sm text-gray-500">
-            <p>
-              Dane testowe: admin@marsoft.pl / admin123
-              <br />
-              lub user@marsoft.pl / test123
+            <h2 style={{ 
+              fontSize: '36px',
+              fontWeight: '700',
+              color: '#333d3d',
+              marginBottom: '16px'
+            }}>
+              MARSOFT <span style={{ color: '#a3cd39' }}>AI</span>
+            </h2>
+            <p style={{ 
+              fontSize: '18px',
+              color: '#6b7280',
+              maxWidth: '400px'
+            }}>
+              Twój inteligentny asystent do tworzenia i zarządzania dokumentacją projektów UE.
             </p>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

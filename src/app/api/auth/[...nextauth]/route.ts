@@ -1,31 +1,34 @@
 // src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
-import prisma from "@/lib/prisma";
-import type { DefaultSession } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 
-// Rozszerzamy typy NextAuth
+// Rozszerza funkcjonalność SessionUser
 declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      role: string;
-    } & DefaultSession["user"] 
-  }
-
   interface User {
     id: string;
-    role: string;
+    role?: string;
   }
-
-  interface JWT {
-    id: string;
-    role: string;
+  
+  interface Session {
+    user?: {
+      id: string;
+      role?: string;
+      name?: string;
+      email?: string;
+    }
   }
 }
 
-export const authOptions = {
+declare module "next-auth/jwt" {
+  interface JWT {
+    id?: string;
+    role?: string;
+  }
+}
+
+export const authOptions: NextAuthOptions = {
+  debug: true,
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -33,49 +36,55 @@ export const authOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Hasło", type: "password" }
       },
-      async authorize(credentials: any) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+      async authorize(credentials) {
+        console.log("Próba autoryzacji dla:", credentials?.email);
 
-        // Pobierz użytkownika z bazy danych
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string }
-        });
+        // Statyczne dane testowe
+        const users = [
+          {
+            id: "1",
+            name: "Admin",
+            email: "admin@marsoft.pl",
+            password: "admin123",
+            role: "admin"
+          },
+          {
+            id: "2", 
+            name: "User",
+            email: "user@marsoft.pl",
+            password: "test123",
+            role: "user"
+          }
+        ];
+
+        // Szukamy użytkownika
+        const user = users.find(u => u.email === credentials?.email);
         
-        if (!user) {
-          return null;
+        if (user && user.password === credentials?.password) {
+          console.log("Autoryzacja pomyślna dla:", user.email);
+          // Musimy usunąć hasło i zwrócić resztę zgodną z typem User
+          const { password, ...userWithoutPass } = user;
+          return userWithoutPass;
         }
 
-        // Sprawdź hasło
-        const passwordMatch = await compare(credentials.password as string, user.password);
-        
-        if (!passwordMatch) {
-          return null;
-        }
-
-        // Zwracamy użytkownika z wymaganymi polami
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        };
+        console.log("Autoryzacja nieudana");
+        return null;
       }
     })
   ],
   callbacks: {
-    async jwt({ token, user }: any) {
+    async jwt({ token, user }) {
       if (user) {
+        // Nie przekształcaj ID - użyj dokładnie takiego, jakie jest w tablicy users
         token.id = user.id;
         token.role = user.role;
       }
       return token;
     },
-    async session({ session, token }: any) {
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id;
-        session.user.role = token.role;
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
       }
       return session;
     }
@@ -84,11 +93,10 @@ export const authOptions = {
     signIn: '/login',
   },
   session: {
-    strategy: "jwt" as const, // Jawne rzutowanie do literału "jwt"
+    strategy: "jwt",
   },
-  secret: process.env.NEXTAUTH_SECRET
+  secret: process.env.NEXTAUTH_SECRET || "temporary-secret-for-development",
 };
 
 const handler = NextAuth(authOptions);
-
 export { handler as GET, handler as POST };
