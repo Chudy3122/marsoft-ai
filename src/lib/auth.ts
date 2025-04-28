@@ -107,6 +107,18 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 dni
   },
+  // Dodaj to do authOptions w src/lib/auth.ts
+cookies: {
+  sessionToken: {
+    name: `next-auth.session-token`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+    },
+  },
+},
   // Używamy zmiennej środowiskowej lub fallback dla testów
   secret: process.env.NEXTAUTH_SECRET || "temporary-secret-for-development",
 };
