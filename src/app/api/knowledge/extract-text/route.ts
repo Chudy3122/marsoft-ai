@@ -3,11 +3,6 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from "@/lib/auth";
 
-import { join } from 'path';
-import { writeFile } from 'fs/promises';
-import { v4 as uuidv4 } from 'uuid';
-import pdfParse from 'pdf-parse';
-
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -38,8 +33,20 @@ export async function POST(request: Request) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
       
-      // Użyj pdf-parse do ekstrakcji tekstu
-      const pdfData = await pdfParse(buffer);
+      // Dynamiczny import pdf-parse, aby uniknąć problemów z węzłami testowymi
+      const pdfParse = (await import('pdf-parse')).default;
+      
+      // Użyj pdf-parse do ekstrakcji tekstu, z timeoutem
+      const pdfData = await Promise.race([
+        pdfParse(buffer, {
+          // Opcje, które mogą pomóc uniknąć problemu z plikami testowymi
+          max: 0, // nie limituj stron
+          version: 'default' // nie szukaj wersji PDF
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout podczas przetwarzania PDF')), 15000)
+        )
+      ]) as any;
       
       return NextResponse.json({ 
         success: true,
@@ -49,10 +56,29 @@ export async function POST(request: Request) {
       
     } catch (error) {
       console.error('Błąd podczas przetwarzania PDF:', error);
-      return NextResponse.json({ 
-        error: 'Błąd podczas przetwarzania PDF', 
-        details: error instanceof Error ? error.message : String(error)
-      }, { status: 500 });
+      
+      // Fallback - proste ekstrakcje tekstu
+      try {
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const textDecoder = new TextDecoder();
+        
+        // Próba prostej ekstrakcji tekstu
+        const simpleText = textDecoder.decode(buffer)
+          .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Usuń kontrolne znaki
+          .replace(/\s+/g, ' '); // Normalizuj białe znaki
+        
+        return NextResponse.json({ 
+          success: true,
+          text: `Uwaga: Użyto uproszczonej metody ekstrakcji tekstu.\n\n${simpleText}`,
+          pages: 1
+        });
+      } catch (fallbackError) {
+        return NextResponse.json({ 
+          error: 'Nie udało się przetworzyć PDF', 
+          details: error instanceof Error ? error.message : String(error)
+        }, { status: 500 });
+      }
     }
   } catch (error) {
     console.error('Ogólny błąd podczas ekstrakcji tekstu:', error);
