@@ -4,6 +4,11 @@ const nextConfig = {
   swcMinify: true,
   images: {
     domains: [],
+    unoptimized: true, // Dodaj tę linię
+  },
+  // Dodaj tę konfigurację
+  experimental: {
+    outputStandalone: true,
   },
   // Upewnij się, że zmienne środowiskowe są poprawnie skonfigurowane
   env: {
