@@ -14,7 +14,7 @@
     "NEXTAUTH_URL": "https://marsoft-ai.vercel.app"
   },
   "functions": {
-    "api/**/*": {
+    "src/app/api/**/*": {
       "memory": 1024,
       "maxDuration": 10
     }
