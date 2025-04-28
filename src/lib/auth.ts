@@ -38,7 +38,6 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         console.log("Próba autoryzacji dla:", credentials?.email);
 
-        // Statyczne dane testowe
         const users = [
           {
             id: "1",
@@ -48,7 +47,7 @@ export const authOptions: NextAuthOptions = {
             role: "admin"
           },
           {
-            id: "2", 
+            id: "2",
             name: "User",
             email: "user@marsoft.pl",
             password: "test123",
@@ -56,12 +55,10 @@ export const authOptions: NextAuthOptions = {
           }
         ];
 
-        // Szukamy użytkownika
         const user = users.find(u => u.email === credentials?.email);
         
         if (user && user.password === credentials?.password) {
           console.log("Autoryzacja pomyślna dla:", user.email);
-          // Musimy usunąć hasło i zwrócić resztę zgodną z typem User
           const { password, ...userWithoutPass } = user;
           return userWithoutPass;
         }

@@ -1,7 +1,8 @@
 // src/app/api/auth/check-admin/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from "@/lib/auth";
+
 
 export async function GET() {
   try {
