@@ -334,7 +334,7 @@ export default function LoginPage() {
               color: '#333d3d',
               marginBottom: '16px'
             }}>
-              MARSOFT <span style={{ color: '#a3cd39' }}>AI</span>
+              
             </h2>
             <p style={{ 
               fontSize: '18px',
