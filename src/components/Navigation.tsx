@@ -31,7 +31,7 @@ export default function Navigation() {
             </div>
           </div>
 
-          {session && (
+          {session && session.user && (
             <div className="flex items-center">
               <div className="relative ml-3">
                 <div>
