@@ -1,4 +1,3 @@
-// src/app/profile/page.tsx
 'use client';
 
 import { useSession } from 'next-auth/react';
@@ -14,12 +13,19 @@ export default function ProfilePage() {
     },
   });
 
+  // Używamy opcjonalnego łańcuchowania aby obsłużyć możliwy undefined
   const [name, setName] = useState(session?.user?.name || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   if (status === 'loading') {
     return <div>Ładowanie...</div>;
+  }
+
+  // Jeśli już dotarliśmy tutaj, to sesja powinna istnieć, ale dodajmy dodatkowe sprawdzenie
+  if (!session || !session.user) {
+    redirect('/login');
+    return null; // To nigdy nie zostanie wykonane z powodu przekierowania, ale TypeScript tego wymaga
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
