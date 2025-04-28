@@ -4,8 +4,8 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from "@/lib/auth";
 import prisma from '@/lib/prisma';
 
-
 export const dynamic = 'force-dynamic';
+
 // Zapisywanie dokumentu (PDF lub Excel)
 export async function POST(
   request: NextRequest,
@@ -26,6 +26,8 @@ export async function POST(
   }
 
   try {
+    console.log("Sesja użytkownika:", session.user.id);
+    
     // Sprawdź, czy czat należy do zalogowanego użytkownika
     const chat = await prisma.chat.findFirst({
       where: {
@@ -34,15 +36,66 @@ export async function POST(
       }
     });
 
+    console.log("Znaleziony czat:", chat ? "Tak" : "Nie");
+
     if (!chat) {
       console.error(`Czat o ID ${chatId} nie znaleziony lub brak uprawnień`);
       return NextResponse.json({ error: 'Czat nie znaleziony lub brak uprawnień' }, { status: 404 });
     }
 
-    const { title, fileType, content, pages, rows, columns, metadata } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error("Błąd parsowania JSON:", parseError);
+      return NextResponse.json({ error: 'Błąd parsowania danych żądania' }, { status: 400 });
+    }
+    
+    const { title, fileType, content, pages, rows, columns, metadata } = body;
 
-    if (!content || !title || !fileType) {
+    console.log("Request body:", { 
+      title, 
+      fileType, 
+      contentLength: content ? content.length : 0,
+      pages, 
+      rows, 
+      columns 
+    });
+    
+    if (!title || !fileType) {
       return NextResponse.json({ error: 'Brak wymaganych danych dokumentu' }, { status: 400 });
+    }
+
+    // Sanityzacja zawartości
+    let sanitizedContent = "";
+    let processedContent = "";
+    
+    try {
+      // Zabezpieczenie przed problemami z treścią
+      if (content) {
+        // Próba sanityzacji treści - usunięcie potencjalnie problematycznych znaków
+        sanitizedContent = content
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Kontrolne znaki ASCII
+          .replace(/\uFFFD/g, ''); // Znak zastępczy Unicode
+        
+        // Sprawdź rozmiar treści
+        const contentSize = Buffer.byteLength(sanitizedContent, 'utf8');
+        console.log(`Rozmiar dokumentu ${title} po sanityzacji: ${contentSize / 1024} KB`);
+        
+        // Ogranicz rozmiar treści dla dużych dokumentów
+        if (contentSize > 500000) { // 500KB limit
+          console.log("Dokument przekracza limit rozmiaru, treść zostanie skrócona");
+          processedContent = sanitizedContent.substring(0, 450000) + "... [treść skrócona ze względu na rozmiar]";
+        } else {
+          processedContent = sanitizedContent;
+        }
+      }
+    } catch (error) {
+      console.error("Błąd podczas przetwarzania treści:", error);
+      // Sprawdź typ błędu i bezpiecznie wyodrębnij wiadomość
+      const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
+      // Zapisz informację o błędzie, ale kontynuuj z pustą treścią
+      processedContent = `[Błąd przetwarzania treści: ${errorMessage}]`;
     }
 
     // Sprawdź, czy istnieje już dokument dla tego czatu
@@ -52,44 +105,82 @@ export async function POST(
       }
     });
 
-    let document;
+    console.log("Istniejący dokument:", existingDoc ? "Tak" : "Nie");
 
-    if (existingDoc) {
-      // Aktualizuj istniejący dokument
-      document = await prisma.document.update({
-        where: {
-          chatId: chatId
-        },
-        data: {
-          title,
-          fileType,
-          content,
-          pages,
-          rows,
-          columns,
-          metadata
-        }
-      });
-    } else {
-      // Utwórz nowy dokument
-      document = await prisma.document.create({
-        data: {
-          title,
-          fileType,
-          content,
-          pages,
-          rows,
-          columns,
-          metadata,
-          chatId
-        }
-      });
+    let document;
+    
+    // Przygotuj dane z obsługą wartości null/undefined
+    const documentData = {
+      title: title || 'Dokument bez tytułu',
+      fileType: fileType || 'unknown',
+      content: processedContent || '',
+      pages: pages !== undefined && pages !== null ? Number(pages) : null,
+      rows: rows !== undefined && rows !== null ? Number(rows) : null,
+      columns: columns !== undefined && columns !== null ? Number(columns) : null,
+      metadata: metadata || {}
+    };
+    
+    console.log("Dane dokumentu do zapisania:", {
+      ...documentData,
+      content: `[Treść ${documentData.content.length} znaków]`
+    });
+
+    try {
+      if (existingDoc) {
+        // Aktualizuj istniejący dokument
+        document = await prisma.document.update({
+          where: {
+            chatId: chatId
+          },
+          data: documentData
+        });
+      } else {
+        // Utwórz nowy dokument
+        document = await prisma.document.create({
+          data: {
+            ...documentData,
+            chatId
+          }
+        });
+      }
+      
+      console.log("Dokument zapisany pomyślnie");
+    } catch (dbError) {
+      console.error("Błąd podczas operacji na bazie danych:", dbError);
+      if (dbError instanceof Error) {
+        console.error("Szczegóły błędu:", {
+          name: dbError.name,
+          message: dbError.message,
+          stack: dbError.stack
+        });
+      }
+      
+      return NextResponse.json(
+        { error: dbError instanceof Error ? dbError.message : 'Błąd bazy danych podczas zapisywania dokumentu' },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ document });
+    // Zwróć dokument bez pełnej treści, aby zmniejszyć rozmiar odpowiedzi
+    const documentWithoutContent = {
+      ...document,
+      content: document.content ? `[Treść dokumentu, ${Buffer.byteLength(document.content, 'utf8') / 1024} KB]` : null
+    };
+
+    return NextResponse.json({ document: documentWithoutContent });
   } catch (error) {
     console.error('Błąd podczas zapisywania dokumentu:', error);
-    return NextResponse.json({ error: 'Wystąpił problem podczas zapisywania dokumentu' }, { status: 500 });
+    
+    // Dodaj szczegółowe logowanie
+    if (error instanceof Error) {
+      console.error('Nazwa błędu:', error.name);
+      console.error('Wiadomość błędu:', error.message);
+      console.error('Stack trace:', error.stack);
+    }
+    
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'Wystąpił problem podczas zapisywania dokumentu'
+    }, { status: 500 });
   }
 }
 

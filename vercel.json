@@ -1,14 +1,22 @@
 {
-    "version": 2,
-    "buildCommand": "npm run build",
-    "outputDirectory": ".next",
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "/"
-      }
-    ],
-    "env": {
-      "NEXT_PUBLIC_HF_API_KEY": ""
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "regions": ["iad1"],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_HF_API_KEY": "",
+    "NEXTAUTH_URL": "https://marsoft-ai.vercel.app"
+  },
+  "functions": {
+    "api/**/*": {
+      "memory": 1024,
+      "maxDuration": 10
     }
   }
+}

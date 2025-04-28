@@ -1,18 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   swcMinify: true,
   images: {
     domains: [],
-    unoptimized: true, // Dodaj tę linię
+    unoptimized: true,
   },
-  // Dodaj tę konfigurację
   experimental: {
-    outputStandalone: true,
+    serverComponentsExternalPackages: [],
   },
-  // Upewnij się, że zmienne środowiskowe są poprawnie skonfigurowane
-  env: {
-    NEXT_PUBLIC_HUGGINGFACE_API_KEY: process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY,
+  // Dodaj wsparcie dla wersji produkcyjnej
+  assetPrefix: process.env.NODE_ENV === 'production' 
+    ? 'https://marsoft-ai.vercel.app' 
+    : undefined,
+  webpack: (config) => {
+    // Ignoruj ostrzeżenia dotyczące package.json
+    config.ignoreWarnings = [
+      { module: /node_modules\/node-fetch/ }
+    ];
+    return config;
   },
 }
 
