@@ -1,12 +1,18 @@
-// middleware.ts
+// middleware.ts 
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import type { NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  // Pomiń middleware dla statycznych zasobów i API uwierzytelniania
+  // Pomiń middleware dla statycznych zasobów (kluczowe dla poprawnego ładowania JS)
   if (
     request.nextUrl.pathname.startsWith('/_next') ||
+    request.nextUrl.pathname.includes('.js') ||
+    request.nextUrl.pathname.includes('.css') ||
+    request.nextUrl.pathname.includes('.woff') ||
+    request.nextUrl.pathname.includes('.woff2') ||
+    request.nextUrl.pathname.includes('.svg') ||
+    request.nextUrl.pathname.includes('.png') ||
     request.nextUrl.pathname.startsWith('/api/auth') ||
     request.nextUrl.pathname.includes('/favicon.ico')
   ) {
@@ -29,7 +35,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Dla pozostałych chronionych ścieżek
-  if (!token) {
+  if (!token && !request.nextUrl.pathname.startsWith('/api/')) {
+    console.log('Przekierowanie do /login z:', request.nextUrl.pathname);
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -37,5 +44,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

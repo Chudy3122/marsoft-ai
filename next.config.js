@@ -6,20 +6,13 @@ const nextConfig = {
     domains: [],
     unoptimized: true,
   },
+  // Usuń assetPrefix jeśli jest obecny
   experimental: {
     serverComponentsExternalPackages: [],
   },
-  // Dodaj wsparcie dla wersji produkcyjnej
-  assetPrefix: process.env.NODE_ENV === 'production' 
-    ? 'https://marsoft-ai.vercel.app' 
-    : undefined,
-  webpack: (config) => {
-    // Ignoruj ostrzeżenia dotyczące package.json
-    config.ignoreWarnings = [
-      { module: /node_modules\/node-fetch/ }
-    ];
-    return config;
-  },
+  // Dodaj output: 'standalone' - to jest KLUCZOWE dla wdrożenia na Vercel
+  output: 'standalone',
+  poweredByHeader: false
 }
 
 module.exports = nextConfig
