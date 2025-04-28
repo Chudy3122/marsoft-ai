@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from "@/lib/auth";
 import prisma from '@/lib/prisma';
 
+
+export const dynamic = 'force-dynamic';
 // Zapisywanie dokumentu (PDF lub Excel)
 export async function POST(
   request: NextRequest,

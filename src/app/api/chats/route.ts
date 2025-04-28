@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from "@/lib/auth";
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
 export async function GET() {
   const session = await getServerSession(authOptions);
   console.log("Sesja w GET /api/chats:", JSON.stringify(session, null, 2));

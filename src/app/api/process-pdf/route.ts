@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server';
 import { PdfReader } from 'pdfreader';
 
+
+export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     // Odczytanie formularza z pliku
