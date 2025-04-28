@@ -16,6 +16,8 @@ export default function LoginPage() {
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const router = useRouter();
 
+
+  
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
