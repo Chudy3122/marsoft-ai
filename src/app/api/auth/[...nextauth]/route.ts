@@ -1,11 +1,8 @@
-// src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import type { NextAuthOptions } from "next-auth";
+import { NextAuthOptions } from "next-auth";
 
-
-
-// Rozszerza funkcjonalność SessionUser
+// Deklaracje typów
 declare module "next-auth" {
   interface User {
     id: string;
@@ -29,6 +26,7 @@ declare module "next-auth/jwt" {
   }
 }
 
+// Konfiguracja autoryzacji
 export const authOptions: NextAuthOptions = {
   debug: true,
   providers: [
@@ -77,7 +75,6 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // Nie przekształcaj ID - użyj dokładnie takiego, jakie jest w tablicy users
         token.id = user.id;
         token.role = user.role;
       }
@@ -100,5 +97,6 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET || "temporary-secret-for-development",
 };
 
+// Handler
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
