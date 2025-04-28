@@ -2,6 +2,30 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+// Deklaracje typów
+declare module "next-auth" {
+  interface User {
+    id: string;
+    role?: string;
+  }
+  
+  interface Session {
+    user?: {
+      id: string;
+      role?: string;
+      name?: string;
+      email?: string;
+    }
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id?: string;
+    role?: string;
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   debug: true,
   providers: [
