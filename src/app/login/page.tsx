@@ -1,8 +1,8 @@
 'use client';
 
 // src/app/login/page.tsx
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { useState, useEffect } from 'react';
+import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import React from 'react';
@@ -15,9 +15,17 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const router = useRouter();
-
-
+  const { data: session, status } = useSession();
   
+  // Dodajemy efekt do sprawdzania sesji
+  useEffect(() => {
+    // Jeśli użytkownik jest już zalogowany, przekieruj na stronę główną
+    if (status === "authenticated" && session) {
+      console.log("Użytkownik już zalogowany, przekierowuję na stronę główną");
+      router.push('/');
+    }
+  }, [status, session, router]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -67,6 +75,29 @@ export default function LoginPage() {
       setPassword('test123');
     }
   };
+
+  // Jeśli trwa weryfikacja statusu sesji, pokazujemy ładowanie
+  if (status === "loading") {
+    return (
+      <div style={{ 
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        backgroundColor: '#f9f9f9'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>Ładowanie...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Jeśli użytkownik jest zalogowany, powinien zostać przekierowany przez useEffect
+  // ale na wszelki wypadek również tutaj blokujemy renderowanie formularza logowania
+  if (status === "authenticated") {
+    return null;
+  }
 
   return (
     <div style={{ 

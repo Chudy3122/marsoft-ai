@@ -1,4 +1,3 @@
-// src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
@@ -82,6 +81,23 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
       }
       return session;
+    },
+    // Dodajemy callback dla kontroli przekierowań
+    async redirect({ url, baseUrl }) {
+      console.log("NextAuth redirect callback:", { url, baseUrl });
+      
+      // Zapobiegamy nieskończonym pętlom przekierowań
+      if (url.startsWith('/login') && url.includes('callbackUrl=/login')) {
+        return baseUrl;
+      }
+      
+      // Standardowa obsługa przekierowań
+      if (url.startsWith('/')) {
+        return `${baseUrl}${url}`;
+      } else if (new URL(url).origin === baseUrl) {
+        return url;
+      }
+      return baseUrl;
     }
   },
   pages: {
@@ -89,6 +105,8 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 dni
   },
+  // Używamy zmiennej środowiskowej lub fallback dla testów
   secret: process.env.NEXTAUTH_SECRET || "temporary-secret-for-development",
 };
