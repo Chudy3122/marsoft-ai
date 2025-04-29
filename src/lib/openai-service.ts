@@ -112,13 +112,13 @@ BARDZO WAŻNE: Odpowiadaj TYLKO na pytania związane z pracą, projektami UE, do
       : prompt;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "o4-mini-2025-04-16",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPromptWithContext }
       ],
-      temperature: 0.7,
-      max_tokens: 800,
+      temperature: 1,
+      max_completion_tokens: 60000,
     });
 
     return response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
