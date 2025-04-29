@@ -8,73 +8,72 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String?
-  email     String    @unique
+  email     String   @unique
   password  String
-  role      String    @default("user")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   chats     Chat[]
 }
 
 model Chat {
-  id              String    @id @default(uuid())
-  title           String    @default("Nowa konwersacja")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  user            User      @relation(fields: [userId], references: [id])
+  id              String     @id @default(uuid())
+  title           String     @default("Nowa konwersacja")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
   userId          String
+  activeDocuments String[]
+  user            User       @relation(fields: [userId], references: [id])
+  documents       Document[]
   messages        Message[]
-  documents       Document[] 
-  activeDocuments String[]  // Lista ID aktywnych dokumentów
-  uploadedDocuments String[] // Lista ID wszystkich wgranych dokumentów (nowe pole)
 }
 
 model Message {
   id        String   @id @default(uuid())
   content   String
-  role      String   // "user" lub "assistant"
+  role      String
   createdAt DateTime @default(now())
-  chat      Chat     @relation(fields: [chatId], references: [id])
   chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id])
 }
 
 model Document {
-  id         String   @id @default(uuid())
-  title      String
-  fileType   String
-  content    String?  @db.Text
-  pages      Int?
-  rows       Int?
-  columns    Int?
-  metadata   Json?    @default("{}")
-  createdAt  DateTime @default(now())
-  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  chatId     String   
-  isDefault  Boolean  @default(false) // Dla wstecznej kompatybilności
+  id        String   @id @default(uuid())
+  title     String
+  fileType  String
+  content   String?
+  pages     Int?
+  rows      Int?
+  columns   Int?
+  metadata  Json?    @default("{}")
+  createdAt DateTime @default(now())
+  chatId    String
+  isDefault Boolean  @default(false)
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   @@index([chatId])
 }
 
 model KnowledgeCategory {
-  id           String              @id @default(uuid())
-  name         String
-  parentId     String?
-  parent       KnowledgeCategory?  @relation("SubCategories", fields: [parentId], references: [id])
+  id            String              @id @default(uuid())
+  name          String
+  parentId      String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  parent        KnowledgeCategory?  @relation("SubCategories", fields: [parentId], references: [id])
   subCategories KnowledgeCategory[] @relation("SubCategories")
-  documents    KnowledgeDocument[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  documents     KnowledgeDocument[]
 }
 
 model KnowledgeDocument {
-  id          String             @id @default(uuid())
-  title       String
-  fileType    String             // "pdf", "excel", "doc", itp.
-  content     String             @db.Text  // Treść dokumentu
-  categoryId  String
-  category    KnowledgeCategory  @relation(fields: [categoryId], references: [id])
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id         String            @id @default(uuid())
+  title      String
+  fileType   String
+  content    String
+  categoryId String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  category   KnowledgeCategory @relation(fields: [categoryId], references: [id])
 }
