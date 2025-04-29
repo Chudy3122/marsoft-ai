@@ -126,20 +126,39 @@ export async function POST(
     });
 
     try {
+      // Najpierw sprawdźmy, czy już istnieje dokument z tym chatId
       if (existingDoc) {
         // Aktualizuj istniejący dokument
         document = await prisma.document.update({
           where: {
-            chatId: chatId
+            chatId: chatId  // To teraz działa, bo chatId jest @unique
           },
           data: documentData
         });
+        
+        // Upewnij się, że dokument jest na liście aktywnych
+        if (chat.activeDocuments && !chat.activeDocuments.includes(document.id)) {
+          await prisma.chat.update({
+            where: { id: chatId },
+            data: {
+              activeDocuments: [...(chat.activeDocuments || []), document.id]
+            }
+          });
+        }
       } else {
-        // Utwórz nowy dokument
+        // Utwórz nowy dokument z chatId
         document = await prisma.document.create({
           data: {
             ...documentData,
-            chatId
+            chatId: chatId
+          }
+        });
+        
+        // Dodaj do listy aktywnych dokumentów
+        await prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            activeDocuments: [...(chat.activeDocuments || []), document.id]
           }
         });
       }
