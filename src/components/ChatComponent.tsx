@@ -265,32 +265,6 @@ export default function ChatComponent() {
     setDocumentInfo(metadata);
     setDocumentChatId(currentChatId);
     
-    // Dodaj wiadomość o wgranym pliku Excel do czatu
-    const excelMessage: Message = {
-      id: uuidv4(),
-      text: `Wgrano arkusz Excel: "${metadata.title}" (${metadata.sheetCount} arkuszy, ${metadata.totalRows} wierszy). Możesz teraz zadawać pytania dotyczące jego zawartości.`,
-      sender: 'bot',
-      timestamp: new Date()
-    };
-    
-    setMessages((prevMessages) => [...prevMessages, excelMessage]);
-    
-    // Zapisz wiadomość w bazie danych
-    if (currentChatId) {
-      fetch(`/api/chats/${currentChatId}/document`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: excelMessage.text,
-          role: 'assistant'
-        }),
-      }).catch(error => {
-        console.error('Błąd podczas zapisywania wiadomości o Excel:', error);
-      });
-    }
-    
     // Zapisz dokument Excel w bazie danych
     fetch(`/api/chats/${currentChatId}/document`, {
       method: 'POST',
@@ -315,9 +289,56 @@ export default function ChatComponent() {
     })
     .then(data => {
       console.log("Excel zapisany w bazie danych:", data);
+      
+      // Dodaj nowy dokument do listy aktywnych dokumentów
+      if (data.document && data.document.id) {
+        const newDocumentId = data.document.id;
+        
+        // Sprawdź czy dokument jest już na liście
+        if (!activeDocumentIds.includes(newDocumentId)) {
+          const updatedActiveDocuments = [...activeDocumentIds, newDocumentId];
+          setActiveDocumentIds(updatedActiveDocuments);
+          
+          // Aktualizuj listę aktywnych dokumentów w bazie danych
+          fetch(`/api/chats/${currentChatId}/documents`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              documentIds: updatedActiveDocuments
+            }),
+          }).catch(error => {
+            console.error('Błąd podczas aktualizacji aktywnych dokumentów:', error);
+          });
+        }
+      }
+      
+      // Dodaj wiadomość o wgranym pliku Excel do czatu
+      const excelMessage: Message = {
+        id: uuidv4(),
+        text: `Wgrano arkusz Excel: "${metadata.title}" (${metadata.sheetCount} arkuszy, ${metadata.totalRows} wierszy). Możesz teraz zadawać pytania dotyczące jego zawartości.`,
+        sender: 'bot',
+        timestamp: new Date()
+      };
+      
+      setMessages((prevMessages) => [...prevMessages, excelMessage]);
+      
+      // Zapisz wiadomość w bazie danych
+      return fetch(`/api/chats/${currentChatId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: excelMessage.text,
+          role: 'assistant'
+        }),
+      });
     })
     .catch(error => {
       console.error('Błąd podczas zapisywania Excel:', error);
+      alert("Wystąpił problem podczas zapisywania arkusza Excel.");
     });
   };
 
@@ -476,12 +497,18 @@ export default function ChatComponent() {
   // Funkcja pomocnicza do obsługi odpowiedzi z OpenAI
   const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
     try {
-      // Obsługa aktywnych dokumentów
+      console.log("Aktywne dokumenty:", activeDocumentIds);
+      
+      // Używamy zawsze aktywnych dokumentów jako głównego źródła informacji
       if (activeDocumentIds.length > 0) {
-        // Używamy ogólnej funkcji getOpenAIResponse, przekazując aktywne dokumenty
+        console.log(`Używam ${activeDocumentIds.length} aktywnych dokumentów do zapytania AI`);
         return await getOpenAIResponse(prompt, activeDocumentIds);
-      } else if (documentText && documentMetadata && documentChatId === currentChatId) {
-        // Obsługa PDF/Excel
+      } 
+      // Jeśli nie ma aktywnych dokumentów, ale jest pojedynczy dokument wczytany
+      else if (documentText && documentMetadata && documentChatId === currentChatId) {
+        console.log("Używam pojedynczego dokumentu jako fallback:", documentType, documentMetadata.title);
+        
+        // Obsługa PDF/Excel bez aktualizacji activeDocumentIds (dla wstecznej kompatybilności)
         if (documentType === 'pdf') {
           return await analyzePdfWithOpenAI(documentText, documentMetadata, prompt);
         } else if (documentType === 'excel') {
@@ -490,6 +517,7 @@ export default function ChatComponent() {
       }
       
       // Standardowe zapytanie bez dokumentów
+      console.log("Używam standardowego zapytania bez dokumentów");
       return await getOpenAIResponse(prompt);
     } catch (error) {
       console.error("Błąd w getOpenAIResponse:", error);
@@ -520,32 +548,6 @@ export default function ChatComponent() {
     setDocumentInfo(metadata);
     setDocumentChatId(currentChatId);
     
-    // Dodaj wiadomość o wgranym PDF do czatu
-    const pdfMessage: Message = {
-      id: uuidv4(),
-      text: `Wgrano dokument PDF: "${metadata.title}" (${metadata.pages} stron). Możesz teraz zadawać pytania dotyczące jego zawartości.`,
-      sender: 'bot',
-      timestamp: new Date()
-    };
-    
-    setMessages((prevMessages) => [...prevMessages, pdfMessage]);
-    
-    // Zapisz wiadomość w bazie danych
-    if (currentChatId) {
-      fetch(`/api/chats/${currentChatId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: pdfMessage.text,
-          role: 'assistant'
-        }),
-      }).catch(error => {
-        console.error('Błąd podczas zapisywania wiadomości o PDF:', error);
-      });
-    }
-    
     // Zapisz dokument PDF w bazie danych
     fetch(`/api/chats/${currentChatId}/document`, {
       method: 'POST',
@@ -570,9 +572,56 @@ export default function ChatComponent() {
     })
     .then(data => {
       console.log("PDF zapisany w bazie danych:", data);
+      
+      // Dodaj nowy dokument do listy aktywnych dokumentów
+      if (data.document && data.document.id) {
+        const newDocumentId = data.document.id;
+        
+        // Sprawdź czy dokument jest już na liście
+        if (!activeDocumentIds.includes(newDocumentId)) {
+          const updatedActiveDocuments = [...activeDocumentIds, newDocumentId];
+          setActiveDocumentIds(updatedActiveDocuments);
+          
+          // Aktualizuj listę aktywnych dokumentów w bazie danych
+          fetch(`/api/chats/${currentChatId}/documents`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              documentIds: updatedActiveDocuments
+            }),
+          }).catch(error => {
+            console.error('Błąd podczas aktualizacji aktywnych dokumentów:', error);
+          });
+        }
+      }
+      
+      // Dodaj wiadomość o wgranym PDF do czatu
+      const pdfMessage: Message = {
+        id: uuidv4(),
+        text: `Wgrano dokument PDF: "${metadata.title}" (${metadata.pages} stron). Możesz teraz zadawać pytania dotyczące jego zawartości.`,
+        sender: 'bot',
+        timestamp: new Date()
+      };
+      
+      setMessages((prevMessages) => [...prevMessages, pdfMessage]);
+      
+      // Zapisz wiadomość w bazie danych
+      return fetch(`/api/chats/${currentChatId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: pdfMessage.text,
+          role: 'assistant'
+        }),
+      });
     })
     .catch(error => {
       console.error('Błąd podczas zapisywania PDF:', error);
+      alert("Wystąpił problem podczas zapisywania dokumentu PDF.");
     });
   };
   

@@ -8,7 +8,29 @@ const openai = new OpenAI({
 });
 
 /**
- * Pobieranie treści dokumentów z biblioteki wiedzy
+ * Pobiera dokument z bazy danych na podstawie ID
+ */
+async function getDocument(documentId: string): Promise<any> {
+  try {
+    console.log(`Pobieranie dokumentu o ID: ${documentId}`);
+    
+    // Pobierz dokument z API czatu
+    const response = await fetch(`/api/chats/documents/${documentId}`);
+    if (!response.ok) {
+      console.error("Błąd odpowiedzi API:", response.status, response.statusText);
+      throw new Error(`Problem z pobraniem dokumentu o ID: ${documentId}`);
+    }
+    
+    const data = await response.json();
+    return data.document;
+  } catch (error) {
+    console.error(`Błąd podczas pobierania dokumentu ${documentId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Pobieranie treści dokumentów z bazy danych i biblioteki wiedzy
  */
 async function getDocumentsContent(documentIds: string[]): Promise<string> {
   if (documentIds.length === 0) return "";
@@ -16,24 +38,35 @@ async function getDocumentsContent(documentIds: string[]): Promise<string> {
   try {
     console.log("Pobieranie treści dokumentów:", documentIds);
     
-    const response = await fetch(`/api/knowledge/documents/content?ids=${documentIds.join(',')}`);
-    if (!response.ok) {
-      console.error("Błąd odpowiedzi API:", response.status, response.statusText);
-      throw new Error('Problem z pobraniem treści dokumentów');
-    }
+    // Przygotuj listę obietnic dla wszystkich żądań
+    const documentPromises = documentIds.map(async (docId) => {
+      // Najpierw sprawdź czy dokument pochodzi z biblioteki wiedzy
+      try {
+        const response = await fetch(`/api/knowledge/documents/content?ids=${docId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.documents && data.documents.length > 0) {
+            return data.documents[0]; // Zwróć dokument z biblioteki wiedzy
+          }
+        }
+      } catch (error) {
+        console.warn(`Błąd podczas próby pobrania dokumentu ${docId} z biblioteki wiedzy:`, error);
+      }
+      
+      // Jeśli nie znaleziono w bibliotece wiedzy, spróbuj pobrać z czatu
+      return getDocument(docId);
+    });
     
-    const data = await response.json();
-    console.log("Odpowiedź API documents/content:", data);
+    // Wykonaj wszystkie żądania równolegle
+    const documents = await Promise.all(documentPromises);
     
-    if (!data.documents || !Array.isArray(data.documents) || data.documents.length === 0) {
-      console.warn("Brak dokumentów w odpowiedzi API");
-      return "Nie znaleziono dokumentów.";
-    }
+    // Filtruj niepuste dokumenty
+    const validDocuments = documents.filter(doc => doc !== null && doc.content);
     
     // Upewnij się, że zwracany string zawiera pełną treść dokumentów
     let documentsText = "";
     
-    for (const doc of data.documents) {
+    for (const doc of validDocuments) {
       if (doc.content) {
         documentsText += `\n--- Dokument "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'}) ---\n\n${doc.content}\n\n`;
       } else {
@@ -41,7 +74,7 @@ async function getDocumentsContent(documentIds: string[]): Promise<string> {
       }
     }
     
-    console.log(`Pobrano treść ${data.documents.length} dokumentów, łączna długość: ${documentsText.length} znaków`);
+    console.log(`Pobrano treść ${validDocuments.length} dokumentów, łączna długość: ${documentsText.length} znaków`);
     
     return documentsText;
   } catch (error) {
@@ -53,7 +86,7 @@ async function getDocumentsContent(documentIds: string[]): Promise<string> {
 /**
  * Funkcja do pobierania odpowiedzi od OpenAI
  * @param prompt Zapytanie do API
- * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy
+ * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy i/lub bazy danych
  * @returns Odpowiedź od API
  */
 export async function getOpenAIResponse(prompt: string, documentIds: string[] = []): Promise<string> {

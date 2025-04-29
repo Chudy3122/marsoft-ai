@@ -27,7 +27,8 @@ model Chat {
   userId          String
   messages        Message[]
   documents       Document[] 
-  activeDocuments String[]   // Lista ID aktywnych dokumentów
+  activeDocuments String[]  // Lista ID aktywnych dokumentów
+  uploadedDocuments String[] // Lista ID wszystkich wgranych dokumentów (nowe pole)
 }
 
 model Message {
