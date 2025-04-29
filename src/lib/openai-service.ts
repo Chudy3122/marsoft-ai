@@ -14,8 +14,8 @@ async function getDocument(documentId: string): Promise<any> {
   try {
     console.log(`Pobieranie dokumentu o ID: ${documentId}`);
     
-    // Pobierz dokument z API czatu
-    const response = await fetch(`/api/chats/documents/${documentId}`);
+    // Poprawny URL do pobrania dokumentu - bezpośrednio z API dokumentów
+    const response = await fetch(`/api/documents/${documentId}`);
     if (!response.ok) {
       console.error("Błąd odpowiedzi API:", response.status, response.statusText);
       throw new Error(`Problem z pobraniem dokumentu o ID: ${documentId}`);
