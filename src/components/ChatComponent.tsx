@@ -79,7 +79,13 @@ export default function ChatComponent() {
       const loadMessages = async () => {
         try {
           const response = await fetch(`/api/chats/${currentChatId}/messages`);
-          if (!response.ok) throw new Error('Problem z pobraniem wiadomości');
+          
+          // Lepsze zarządzanie błędami odpowiedzi
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Problem z pobraniem wiadomości:', errorData);
+            throw new Error(errorData.error || `Problem z pobraniem wiadomości (kod ${response.status})`);
+          }
           
           const data = await response.json();
           
@@ -104,57 +110,52 @@ export default function ChatComponent() {
             setMessages([initialMessage]);
             
             // Zapisz początkową wiadomość w bazie danych
-            await fetch(`/api/chats/${currentChatId}/messages`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                content: initialMessage.text,
-                role: 'assistant'
-              }),
-            });
+            try {
+              await fetch(`/api/chats/${currentChatId}/messages`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  content: initialMessage.text,
+                  role: 'assistant'
+                }),
+              });
+            } catch (postError) {
+              console.error('Błąd podczas zapisywania początkowej wiadomości:', postError);
+            }
           }
   
-          // Dodatkowo załaduj dokument, jeśli istnieje dla tego czatu
-          try {
-            const docResponse = await fetch(`/api/chats/${currentChatId}/document`);
-            if (docResponse.ok) {
-              const docData = await docResponse.json();
-              
-              if (docData.document) {
-                console.log("Załadowano dokument z bazy danych:", docData.document.title);
-                // Ustaw stany dokumentu z danych z bazy
-                setDocumentType(docData.document.fileType);
-                setDocumentText(docData.document.content);
-                setDocumentMetadata(docData.document.metadata);
-                setDocumentInfo(docData.document.metadata);
-                setDocumentChatId(currentChatId);
-              } else {
-                // Jeśli nie ma dokumentu dla tego czatu, wyczyść stany
-                setDocumentType(null);
-                setDocumentText(null);
-                setDocumentMetadata(null);
-                setDocumentInfo(null);
-                setDocumentChatId(null);
-              }
-            }
-          } catch (docError) {
-            console.error("Błąd podczas ładowania dokumentu:", docError);
-          }
-
+          // Dodatkowo załaduj dokumenty, jeśli istnieją dla tego czatu
           try {
             const docsResponse = await fetch(`/api/chats/${currentChatId}/documents`);
             if (docsResponse.ok) {
               const docsData = await docsResponse.json();
-              setActiveDocumentIds(docsData.documentIds || []);
+              // Sprawdz czy documentIds jest tablicą przed ustawieniem stanu
+              if (Array.isArray(docsData.documentIds)) {
+                setActiveDocumentIds(docsData.documentIds);
+              } else {
+                console.warn("Pobrana lista documentIds nie jest tablicą:", docsData.documentIds);
+                setActiveDocumentIds([]);
+              }
+            } else {
+              console.warn("Nie udało się pobrać dokumentów czatu, kod:", docsResponse.status);
+              setActiveDocumentIds([]);
             }
           } catch (error) {
             console.error('Błąd podczas pobierania dokumentów czatu:', error);
+            setActiveDocumentIds([]);
           }
-
+          
         } catch (error) {
           console.error('Błąd podczas pobierania wiadomości:', error);
+          // Można dodać obsługę błędów w UI, np. wyświetlić komunikat użytkownikowi
+          setMessages([{
+            id: uuidv4(),
+            text: "Wystąpił problem z połączeniem. Spróbuj odświeżyć stronę lub skontaktuj się z administratorem.",
+            sender: 'bot',
+            timestamp: new Date()
+          }]);
         }
       };
       
