@@ -44,7 +44,25 @@ async function addUsers() {
       }
     });
     
-    console.log('Dodano użytkowników:', { admin, user });
+    // Dodaj lub aktualizuj nowego użytkownika Jerzy
+    const jerzy = await prisma.user.upsert({
+      where: { id: '3' },
+      update: {
+        name: 'Jerzy',
+        email: 'jerzy.szyndler@itcomplete.pl',
+        password: 'J2024@2025!',
+        role: 'user'
+      },
+      create: {
+        id: '3',
+        name: 'Jerzy',
+        email: 'jerzy.szyndler@itcomplete.pl',
+        password: 'J2024@2025!',
+        role: 'user'
+      }
+    });
+    
+    console.log('Dodano użytkowników:', { admin, user, jerzy });
     
     // Sprawdź, czy użytkownicy zostali dodani
     const allUsers = await prisma.user.findMany();

@@ -1,10 +1,15 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // Deklaracje typów
 declare module "next-auth" {
   interface User {
     id: string;
+    name: string | null; // Dodajemy możliwość null do name
+    email: string;
     role?: string;
   }
   
@@ -12,7 +17,7 @@ declare module "next-auth" {
     user?: {
       id: string;
       role?: string;
-      name?: string;
+      name?: string | null; // Dodajemy możliwość null do name
       email?: string;
     }
   }
@@ -37,33 +42,47 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         console.log("Próba autoryzacji dla:", credentials?.email);
 
-        const users = [
-          {
-            id: "1",
-            name: "Admin",
-            email: "admin@marsoft.pl",
-            password: "admin123",
-            role: "admin"
-          },
-          {
-            id: "2",
-            name: "User",
-            email: "user@marsoft.pl",
-            password: "test123",
-            role: "user"
-          }
-        ];
-
-        const user = users.find(u => u.email === credentials?.email);
-        
-        if (user && user.password === credentials?.password) {
-          console.log("Autoryzacja pomyślna dla:", user.email);
-          const { password, ...userWithoutPass } = user;
-          return userWithoutPass;
+        if (!credentials?.email || !credentials?.password) {
+          console.log("Brak poprawnych danych uwierzytelniających");
+          return null;
         }
 
-        console.log("Autoryzacja nieudana");
-        return null;
+        try {
+          // Pobieranie użytkownika z bazy danych
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email }
+          });
+
+          if (!user) {
+            console.log("Użytkownik nie znaleziony w bazie danych");
+            return null;
+          }
+
+          // Sprawdzenie hasła (jako plaintext)
+          if (user.password === credentials.password) {
+            console.log("Autoryzacja pomyślna dla:", user.email);
+            
+            // Konwertujemy użytkownika z bazy danych na format wymagany przez NextAuth
+            const authUser = {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              // Pomijamy tu password i inne pola, które nie są częścią interfejsu User
+            };
+            
+            return authUser;
+          } else {
+            console.log("Niepoprawne hasło");
+            return null;
+          }
+        } catch (error) {
+          console.error("Błąd podczas autoryzacji:", error);
+          return null;
+        } finally {
+          // Zalecane zamykanie połączenia Prisma w kontekście serverless
+          await prisma.$disconnect();
+        }
       }
     })
   ],
@@ -107,18 +126,17 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 dni
   },
-  // Dodaj to do authOptions w src/lib/auth.ts
-cookies: {
-  sessionToken: {
-    name: `next-auth.session-token`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
     },
   },
-},
   // Używamy zmiennej środowiskowej lub fallback dla testów
   secret: process.env.NEXTAUTH_SECRET || "temporary-secret-for-development",
 };
