@@ -271,19 +271,7 @@ export default function LoginPage() {
                 Dane testowe:
               </p>
               <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => fillTestCredentials('admin')}
-                  style={{
-                    padding: '5px 10px',
-                    backgroundColor: '#e5e7eb',
-                    border: 'none',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  admin@marsoft.pl / admin123
-                </button>
+                
                 <button
                   onClick={() => fillTestCredentials('user')}
                   style={{
