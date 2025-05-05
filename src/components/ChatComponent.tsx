@@ -12,6 +12,8 @@ import ExcelUploadButton from '@/components/ExcelUploadButton';  // Nowy import
 import KnowledgeLibraryButton from '@/components/KnowledgeLibraryButton';
 import ActiveDocumentsBanner from '@/components/ActiveDocumentsBanner';
 import KnowledgeLibraryPanel from './KnowledgeLibraryPanel';
+import RenameDialog from '@/components/RenameDialog';
+
 // Definicja typów
 interface Message {
   id: string;
@@ -49,6 +51,10 @@ export default function ChatComponent() {
   const [documentChatId, setDocumentChatId] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [chatToRename, setChatToRename] = useState<{id: string, title: string} | null>(null);
+  const [showRenameInput, setShowRenameInput] = useState(false);
+  const [newChatName, setNewChatName] = useState("");
   // Pobieranie historii czatów
   useEffect(() => {
     const fetchChats = async () => {
@@ -182,6 +188,35 @@ export default function ChatComponent() {
   // Funkcja do obsługi wyboru dokumentów
   const handleDocumentsSelected = (documentIds: string[]) => {
     setActiveDocumentIds(documentIds);
+  };
+
+
+  const handleRenameChat = async () => {
+    if (!currentChatId || !newChatName.trim()) return;
+    
+    try {
+      const response = await fetch(`/api/chats/${currentChatId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: newChatName.trim()
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Problem z aktualizacją nazwy czatu');
+      
+      // Aktualizacja nazwy czatu w lokalnym stanie
+      setChats(prevChats => prevChats.map(chat => 
+        chat.id === currentChatId ? {...chat, title: newChatName.trim()} : chat
+      ));
+      
+      setShowRenameInput(false);
+    } catch (error) {
+      console.error('Błąd podczas zmiany nazwy czatu:', error);
+      alert('Wystąpił problem podczas zmiany nazwy czatu.');
+    }
   };
 
   // Przewijanie do najnowszej wiadomości
@@ -779,6 +814,149 @@ export default function ChatComponent() {
                           {formatDate(chat.updatedAt)}
                         </div>
                       </div>
+                      {currentChatId && (
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => {
+                              const currentChat = chats.find(chat => chat.id === currentChatId);
+                              if (currentChat) {
+                                setNewChatName(currentChat.title);
+                                setShowRenameInput(!showRenameInput);
+                              }
+                            }}
+                            style={{
+                              backgroundColor: 'transparent',
+                              border: 'none',
+                              color: '#9ca3af',
+                              padding: '4px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              opacity: 0.7,
+                              transition: 'opacity 0.2s'
+                            }}
+                            title="Zmień nazwę"
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.opacity = '1';
+                              e.currentTarget.style.color = '#4b5563';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.opacity = '0.7';
+                              e.currentTarget.style.color = '#9ca3af';
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                          </button>
+                          
+                          {showRenameInput && (
+                            <>
+                              <div 
+                                style={{
+                                  position: 'fixed',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  zIndex: 9998,
+                                  backgroundColor: 'rgba(0, 0, 0, 0.3)'
+                                }}
+                                onClick={() => setShowRenameInput(false)}
+                              ></div>
+                              <div style={{
+                                position: 'fixed',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                zIndex: 9999,
+                                width: '300px',
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                border: '1px solid #e5e7eb'
+                              }}>
+                                <div style={{
+                                  padding: '12px 16px',
+                                  borderBottom: '1px solid #e5e7eb',
+                                  fontSize: '14px',
+                                  fontWeight: 500,
+                                  color: '#374151'
+                                }}>
+                                  Zmień nazwę konwersacji
+                                </div>
+                                
+                                <div style={{ padding: '16px' }}>
+                                  <div style={{
+                                    fontSize: '13px',
+                                    fontWeight: 500,
+                                    color: '#6b7280',
+                                    marginBottom: '8px'
+                                  }}>
+                                    Nazwa:
+                                  </div>
+                                  
+                                  <input
+                                    type="text"
+                                    value={newChatName}
+                                    onChange={(e) => setNewChatName(e.target.value)}
+                                    autoFocus
+                                    style={{
+                                      width: '100%',
+                                      padding: '8px 10px',
+                                      fontSize: '14px',
+                                      border: '1px solid #d1d5db',
+                                      borderRadius: '4px',
+                                      outline: 'none',
+                                      boxSizing: 'border-box'
+                                    }}
+                                  />
+                                </div>
+                                
+                                <div style={{
+                                  padding: '12px 16px',
+                                  borderTop: '1px solid #e5e7eb',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center'
+                                }}>
+                                  <button
+                                    onClick={() => setShowRenameInput(false)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '4px',
+                                      border: 'none',
+                                      backgroundColor: 'transparent',
+                                      color: '#4b5563',
+                                      fontSize: '14px',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    Anuluj
+                                  </button>
+                                  
+                                  <button
+                                    onClick={handleRenameChat}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '4px',
+                                      border: 'none',
+                                      backgroundColor: '#a3cd39',
+                                      color: 'white',
+                                      fontSize: '14px',
+                                      fontWeight: 500,
+                                      cursor: 'pointer'
+                                    }}
+                                    disabled={!newChatName.trim()}
+                                  >
+                                    Zapisz
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
                       {/* Przycisk usuwania */}
                       <button
                         onClick={(e) => handleDeleteChat(chat.id, e)}
@@ -869,6 +1047,7 @@ export default function ChatComponent() {
               />
             </div>
             <h1 style={{ fontSize: '24px', fontWeight: 600, color: '#333d3d' }}>MarsoftAI</h1>
+            
           </div>
           
           <div style={{ 
@@ -1217,6 +1396,15 @@ export default function ChatComponent() {
           }
         `}</style>
       </div>
+      {/* Dialog zmiany nazwy */}
+      {showRenameDialog && chatToRename && (
+        <RenameDialog
+          isOpen={showRenameDialog}
+          currentName={chatToRename.title}
+          onClose={() => setShowRenameDialog(false)}
+          onRename={handleRenameChat}
+        />
+      )}
     </div>
   );
 }

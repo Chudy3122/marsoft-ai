@@ -62,11 +62,99 @@ async function addUsers() {
       }
     });
     
-    console.log('Dodano użytkowników:', { admin, user, jerzy });
+    // Dodaj lub aktualizuj nowych użytkowników z różnymi hasłami
+    const piotr = await prisma.user.upsert({
+      where: { email: 'piotr.niziol@itcomplete.pl' },
+      update: {
+        name: 'Piotr Nizioł',
+        password: 'Piotr#2024Secure',
+        role: 'user'
+      },
+      create: {
+        name: 'Piotr Nizioł',
+        email: 'piotr.niziol@itcomplete.pl',
+        password: 'Piotr#2024Secure',
+        role: 'user'
+      }
+    });
+    
+    const pawel = await prisma.user.upsert({
+      where: { email: 'pawel.zmudzki@itcomplete.pl' },
+      update: {
+        name: 'Paweł Żmudzki',
+        password: 'Pawel$Z2024!',
+        role: 'user'
+      },
+      create: {
+        name: 'Paweł Żmudzki',
+        email: 'pawel.zmudzki@itcomplete.pl',
+        password: 'Pawel$Z2024!',
+        role: 'user'
+      }
+    });
+    
+    const ewelina = await prisma.user.upsert({
+      where: { email: 'ewelina.pcion@itcomplete.pl' },
+      update: {
+        name: 'Ewelina Pcion',
+        password: 'Ewe&Pcion2024*',
+        role: 'user'
+      },
+      create: {
+        name: 'Ewelina Pcion',
+        email: 'ewelina.pcion@itcomplete.pl',
+        password: 'Ewe&Pcion2024*',
+        role: 'user'
+      }
+    });
+    
+    const izabela = await prisma.user.upsert({
+      where: { email: 'izabela.kula@itcomplete.pl' },
+      update: {
+        name: 'Izabela Kula',
+        password: 'Izabela@K2024!',
+        role: 'user'
+      },
+      create: {
+        name: 'Izabela Kula',
+        email: 'izabela.kula@itcomplete.pl',
+        password: 'Izabela@K2024!',
+        role: 'user'
+      }
+    });
+    
+    const katarzyna = await prisma.user.upsert({
+      where: { email: 'katarzyna.skijko@itcomplete.pl' },
+      update: {
+        name: 'Katarzyna Skijko',
+        password: 'Kasia%Ski2024#',
+        role: 'user'
+      },
+      create: {
+        name: 'Katarzyna Skijko',
+        email: 'katarzyna.skijko@itcomplete.pl',
+        password: 'Kasia%Ski2024#',
+        role: 'user'
+      }
+    });
+    
+    console.log('Dodano użytkowników:', { 
+      admin, 
+      user, 
+      jerzy
+    });
+    
+    console.log('Dodano nowych użytkowników z unikalnym hasłami:');
+    console.log('Piotr Nizioł - hasło: Piotr#2024Secure');
+    console.log('Paweł Żmudzki - hasło: Pawel$Z2024!');
+    console.log('Ewelina Pcion - hasło: Ewe&Pcion2024*');
+    console.log('Izabela Kula - hasło: Izabela@K2024!');
+    console.log('Katarzyna Skijko - hasło: Kasia%Ski2024#');
     
     // Sprawdź, czy użytkownicy zostali dodani
     const allUsers = await prisma.user.findMany();
-    console.log('Wszyscy użytkownicy w bazie:', allUsers);
+    console.log('Liczba użytkowników w bazie:', allUsers.length);
+    console.log('Adresy email wszystkich użytkowników:', allUsers.map(user => user.email));
     
   } catch (error) {
     console.error('Błąd podczas dodawania użytkowników:', error);
