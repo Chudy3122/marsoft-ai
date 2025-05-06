@@ -68,7 +68,7 @@ async function getDocumentsContent(documentIds: string[]): Promise<string> {
     
     for (const doc of validDocuments) {
       if (doc.content) {
-        documentsText += `\n--- Dokument "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'}) ---\n\n${doc.content}\n\n`;
+        documentsText += `\n### Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n${doc.content}\n\n`;
       } else {
         console.warn(`Dokument ${doc.id} nie zawiera treści`);
       }
@@ -81,6 +81,34 @@ async function getDocumentsContent(documentIds: string[]): Promise<string> {
     console.error('Błąd podczas pobierania treści dokumentów:', error);
     return "Nie udało się pobrać treści dokumentów.";
   }
+}
+
+/**
+ * Funkcja pomocnicza do poprawy formatowania Markdown dla lepszego wyświetlania
+ */
+function improveMarkdownFormatting(markdown: string): string {
+  let improved = markdown;
+
+  // Zapewniamy, że każdy element listy jest w osobnej linii
+  improved = improved.replace(/(\d+\. [^\n]+)(?=\d+\.)/g, '$1\n');
+  improved = improved.replace(/(- [^\n]+)(?=- )/g, '$1\n');
+  
+  // Zapewniamy, że przed nagłówkami jest pusta linia
+  improved = improved.replace(/([^\n])(\n#{1,3} )/g, '$1\n$2');
+  
+  // Zapewniamy, że po nagłówkach jest pusta linia
+  improved = improved.replace(/(#{1,3} [^\n]+)(\n[^#\n])/g, '$1\n$2');
+  
+  // Zapewniamy, że każdy element listy numerowanej ma liczbę i kropkę (np. "1. ")
+  improved = improved.replace(/^(\d+)([^\.\s])/gm, '$1. $2');
+  
+  // Zapewniamy, że każdy element listy punktowanej ma myślnik i spację (np. "- ")
+  improved = improved.replace(/^(\*|\+)(?!\*)\s*/gm, '- ');
+  
+  // Zapewniamy, że po liscie jest pusta linia
+  improved = improved.replace(/((?:- |\d+\. ).+)(\n[^-\d\n])/g, '$1\n$2');
+  
+  return improved;
 }
 
 /**
@@ -102,14 +130,22 @@ export async function getOpenAIResponse(prompt: string, documentIds: string[] = 
 
     const systemPrompt = `Jesteś asystentem MarsoftAI, specjalistą od projektów UE. Pomagasz w tworzeniu dokumentacji projektowej, odpowiadasz na pytania związane z funduszami europejskimi, i doradzasz w kwestiach pisania wniosków, raportów, harmonogramów i budżetów. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
 
+FORMATOWANIE: Używaj składni Markdown, aby zapewnić dobrą czytelność odpowiedzi:
+1. Wszystkie listy punktowane formatuj używając myślników (-) i nowej linii dla każdego punktu
+2. Wszystkie listy numerowane formatuj jako 1., 2., itd., zawsze w nowej linii
+3. Używaj nagłówków (## dla głównych sekcji, ### dla podsekcji)
+4. Wydzielaj poszczególne sekcje pustymi liniami
+5. Używaj **pogrubienia** dla ważnych terminów i pojęć
+6. Nigdy nie używaj punktów oddzielonych tylko spacjami - zawsze używaj właściwego formatowania Markdown z nowymi liniami
+
 Jeśli użytkownik załączył jakieś dokumenty, to ważne, abyś bazował na ich treści w swojej odpowiedzi. Dokumenty są bardzo ważnym kontekstem dla Twoich odpowiedzi.
 
 BARDZO WAŻNE: Odpowiadaj TYLKO na pytania związane z pracą, projektami UE, dokumentacją projektową, funduszami europejskimi i podobnymi tematami zawodowymi.`;
     
     // Dodaj kontekst dokumentów do promptu użytkownika
     const userPromptWithContext = documentIds.length > 0 
-      ? `Dokumenty referencyjne:\n${documentsContext}\n\nPytanie użytkownika: ${prompt}\n\nOdpowiedz na podstawie dostarczonych dokumentów i swojej wiedzy ogólnej.`
-      : prompt;
+      ? `Dokumenty referencyjne:\n${documentsContext}\n\nPytanie użytkownika: ${prompt}\n\nOdpowiedz na podstawie dostarczonych dokumentów i swojej wiedzy ogólnej. Pamiętaj o prawidłowym formatowaniu Markdown.`
+      : `${prompt}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
 
     const response = await openai.chat.completions.create({
       model: "o4-mini-2025-04-16",
@@ -121,7 +157,11 @@ BARDZO WAŻNE: Odpowiadaj TYLKO na pytania związane z pracą, projektami UE, do
       max_completion_tokens: 60000,
     });
 
-    return response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
+    // Pobierz tekst odpowiedzi
+    const rawResponse = response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
+    
+    // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
+    return improveMarkdownFormatting(rawResponse);
   } catch (error) {
     console.error('Błąd podczas pobierania odpowiedzi z OpenAI:', error);
     return "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
@@ -151,21 +191,24 @@ export async function analyzePdfWithOpenAI(
 
     // Połącz kontekst PDF i dokumentów z biblioteki
     let fullContext = `
-Analizowany dokument PDF:
-Tytuł: ${pdfMetadata.title || 'Nieznany'}
-Liczba stron: ${pdfMetadata.pages || 'Nieznana'}
+## Analizowany dokument PDF:
+- Tytuł: ${pdfMetadata.title || 'Nieznany'}
+- Liczba stron: ${pdfMetadata.pages || 'Nieznana'}
 
-Zawartość dokumentu (fragment):
+### Zawartość dokumentu (fragment):
 ${pdfText.substring(0, 3000)}...
 `;
 
     if (documentsContext) {
-      fullContext += `\nDodatkowe dokumenty referencyjne:\n${documentsContext}`;
+      fullContext += `\n## Dodatkowe dokumenty referencyjne:\n${documentsContext}`;
     }
 
-    fullContext += `\nNa podstawie powyższej zawartości, odpowiedz na pytanie: ${query}`;
+    fullContext += `\n## Na podstawie powyższej zawartości, odpowiedz na pytanie:\n${query}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
     
-    return await getOpenAIResponse(fullContext);
+    const response = await getOpenAIResponse(fullContext);
+    
+    // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
+    return improveMarkdownFormatting(response);
   } catch (error) {
     console.error('Błąd podczas analizy PDF z OpenAI:', error);
     return "Przepraszam, wystąpił błąd podczas analizy dokumentu. Spróbuj ponownie później.";
@@ -195,23 +238,28 @@ export async function analyzeExcelWithOpenAI(
 
     // Połącz kontekst Excel i dokumentów z biblioteki
     let fullContext = `
-Analizowany arkusz Excel:
-Tytuł: ${excelMetadata.title || 'Nieznany'}
-Liczba arkuszy: ${excelMetadata.sheetCount || 'Nieznana'}
-Liczba wierszy: ${excelMetadata.totalRows || 'Nieznana'}
-Liczba kolumn: ${excelMetadata.totalColumns || 'Nieznana'}
+## Analizowany arkusz Excel:
+- Tytuł: ${excelMetadata.title || 'Nieznany'}
+- Liczba arkuszy: ${excelMetadata.sheetCount || 'Nieznana'}
+- Liczba wierszy: ${excelMetadata.totalRows || 'Nieznana'}
+- Liczba kolumn: ${excelMetadata.totalColumns || 'Nieznana'}
 
-Zawartość arkusza (fragment):
+### Zawartość arkusza (fragment):
+\`\`\`
 ${excelText.substring(0, 3000)}...
+\`\`\`
 `;
 
     if (documentsContext) {
-      fullContext += `\nDodatkowe dokumenty referencyjne:\n${documentsContext}`;
+      fullContext += `\n## Dodatkowe dokumenty referencyjne:\n${documentsContext}`;
     }
 
-    fullContext += `\nNa podstawie powyższej zawartości, odpowiedz na pytanie: ${query}`;
+    fullContext += `\n## Na podstawie powyższej zawartości, odpowiedz na pytanie:\n${query}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
     
-    return await getOpenAIResponse(fullContext);
+    const response = await getOpenAIResponse(fullContext);
+    
+    // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
+    return improveMarkdownFormatting(response);
   } catch (error) {
     console.error('Błąd podczas analizy Excel z OpenAI:', error);
     return "Przepraszam, wystąpił błąd podczas analizy arkusza Excel. Spróbuj ponownie później.";

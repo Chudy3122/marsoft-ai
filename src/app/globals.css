@@ -18,6 +18,8 @@
   --gray-700: 55, 65, 81;
   --gray-800: 31, 41, 55;
   --gray-900: 17, 24, 39;
+  --gray-border: 229, 231, 235;
+  --gray-light: 249, 250, 251;
 }
 
 html {
@@ -116,161 +118,244 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* Style dla Markdown */
-.prose pre {
-  background-color: rgba(var(--gray-100), 0.8);
-  border-radius: 8px;
-  padding: 1rem;
-  overflow-x: auto;
-  margin: 0.5rem 0;
+/* ============== STYLE DLA MARKDOWN ============== */
+
+/* Podstawowe style dla contentu Markdown */
+.markdown-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  overflow-wrap: break-word;
 }
 
-.prose code {
-  background-color: rgba(var(--gray-100), 0.8);
-  border-radius: 4px;
-  padding: 0.125rem 0.25rem;
-  font-size: 0.875rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+/* Paragraf */
+.markdown-content p {
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
 }
 
-.prose p {
-  margin: 0.5rem 0;
+/* Nagłówki */
+.markdown-content h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: rgb(var(--gray-800));
 }
 
-.prose ul,
-.prose ol {
-  padding-left: 1.5rem;
-  margin: 0.5rem 0;
-}
-
-.prose ul {
-  list-style-type: disc;
-}
-
-.prose ol {
-  list-style-type: decimal;
-}
-
-.prose blockquote {
-  border-left: 4px solid rgb(var(--primary));
-  padding-left: 1rem;
-  font-style: italic;
-  color: rgb(var(--gray-600));
-  margin: 0.5rem 0;
-}
-
-.prose table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.5rem 0;
-}
-
-.prose table th,
-.prose table td {
-  border: 1px solid rgb(var(--gray-200));
-  padding: 0.5rem;
-  text-align: left;
-}
-
-.prose table th {
-  background-color: rgb(var(--gray-light));
+.markdown-content h2 {
+  font-size: 1.25rem;
   font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: rgb(var(--gray-800));
 }
 
-
-/* Animacja wpisywania wiadomości */
-.typing-indicator {
-  display: flex;
-  align-items: center;
+.markdown-content h3 {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: rgb(var(--gray-700));
 }
 
-.typing-indicator span {
-  height: 8px;
-  width: 8px;
-  background-color: rgb(var(--accent));
-  border-radius: 50%;
-  display: block;
-  margin: 0 2px;
-  opacity: 0.4;
-  animation: typing 1s infinite alternate;
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  color: rgb(var(--gray-700));
 }
 
-.typing-indicator span:nth-child(1) {
-  animation-delay: 0s;
+/* Listy */
+.markdown-content ul {
+  list-style-type: disc;
+  margin-left: 1.5rem;
+  margin-bottom: 0.75rem;
+  margin-top: 0.5rem;
 }
 
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.3s;
+.markdown-content ol {
+  list-style-type: decimal;
+  margin-left: 1.5rem;
+  margin-bottom: 0.75rem;
+  margin-top: 0.5rem;
 }
 
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.6s;
+.markdown-content li {
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+  display: list-item !important; /* Kluczowe dla poprawnego wyświetlania list */
 }
 
-@keyframes typing {
-  0% {
-    opacity: 0.4;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(-3px);
-  }
+.markdown-content li::marker {
+  color: rgb(var(--primary));
 }
 
-/* Style dla Markdown */
-.prose pre {
-  background-color: rgb(var(--gray-light));
-  border-radius: 0.375rem;
-  padding: 1rem;
-  overflow-x: auto;
+.markdown-content li p {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
-.prose code {
-  background-color: rgb(var(--gray-light));
+/* Listy zagnieżdżone */
+.markdown-content ul ul,
+.markdown-content ol ol,
+.markdown-content ul ol,
+.markdown-content ol ul {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Wyróżnienia */
+.markdown-content strong {
+  font-weight: 700;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 
+               "Liberation Mono", "Courier New", monospace;
+  background-color: rgba(var(--gray-100), 0.8);
+  padding: 0.125rem 0.25rem;
   border-radius: 0.25rem;
-  padding: 0.125rem 0.25rem;
-  font-size: 0.875rem;
+  font-size: 0.875em;
 }
 
-.prose table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1rem 0;
+.markdown-content pre {
+  background-color: rgba(var(--gray-100), 0.8);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
 }
 
-.prose table th,
-.prose table td {
-  border: 1px solid rgb(var(--gray-border));
-  padding: 0.5rem;
-  text-align: left;
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 0.9em;
+  color: rgb(var(--gray-800));
 }
 
-.prose table th {
-  background-color: rgb(var(--gray-light));
-  font-weight: 600;
-}
-
-.prose ul,
-.prose ol {
-  padding-left: 1.5rem;
-}
-
-.prose ul {
-  list-style-type: disc;
-}
-
-.prose ol {
-  list-style-type: decimal;
-}
-
-.prose blockquote {
+/* Cytaty */
+.markdown-content blockquote {
   border-left: 4px solid rgb(var(--primary));
   padding-left: 1rem;
+  margin: 0.75rem 0;
+  color: rgb(var(--gray-600));
   font-style: italic;
-  color: rgba(var(--foreground), 0.8);
 }
 
+/* Separatory */
+.markdown-content hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--gray-200));
+  margin: 1.5rem 0;
+}
+
+/* ============== ULEPSZONE STYLE DLA TABEL ============== */
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+  display: block; /* Ważne dla responsywności na małych ekranach */
+  font-size: 0.9rem;
+}
+
+@media (min-width: 768px) {
+  .markdown-content table {
+    display: table; /* Przywróć normalne wyświetlanie na większych ekranach */
+    width: 100%;
+  }
+}
+
+.markdown-content thead {
+  background-color: rgba(var(--gray-100), 0.8);
+  border-bottom: 2px solid rgb(var(--gray-300));
+}
+
+.markdown-content th {
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgb(var(--gray-300));
+  background-color: rgba(var(--gray-50), 0.8);
+  white-space: nowrap;
+}
+
+.markdown-content td {
+  padding: 0.75rem 1rem;
+  border: 1px solid rgb(var(--gray-300));
+  vertical-align: top;
+}
+
+.markdown-content tr:nth-child(even) {
+  background-color: rgba(var(--gray-50), 0.5);
+}
+
+.markdown-content tr:hover {
+  background-color: rgba(var(--primary), 0.05);
+}
+
+/* Style dla tabeli z nagłówkami tylko w pierwszej kolumnie */
+.markdown-content table.first-col-header td:first-child {
+  font-weight: 600;
+  background-color: rgba(var(--gray-50), 0.8);
+}
+
+/* Specjalne style dla tabel w wiadomościach użytkownika (na zielonym tle) */
+.message-user .markdown-content table {
+  color: rgb(var(--foreground));
+  background-color: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.message-user .markdown-content th,
+.message-user .markdown-content td {
+  border-color: rgba(var(--gray-300), 0.5);
+}
+
+.message-user .markdown-content thead,
+.message-user .markdown-content tr:nth-child(even) {
+  background-color: rgba(var(--gray-100), 0.8);
+}
+
+/* Odstępy między wierszami w komórkach tabeli, by zwiększyć czytelność */
+.markdown-content td p,
+.markdown-content th p {
+  margin: 0.25rem 0;
+}
+
+/* Obsługa połączeń międzykomórkowych */
+.markdown-content td[colspan],
+.markdown-content th[colspan] {
+  text-align: center;
+}
+
+.markdown-content td[rowspan],
+.markdown-content th[rowspan] {
+  vertical-align: middle;
+}
+
+/* Responsywne tabele na małych ekranach */
+@media (max-width: 640px) {
+  .markdown-content table {
+    font-size: 0.8rem;
+  }
+  
+  .markdown-content th,
+  .markdown-content td {
+    padding: 0.5rem;
+  }
+}
+
+/* Dodatkowe poprawki dla wiadomości w czacie */
 .message-container {
   max-width: 75%;
   animation: fadeIn 0.3s ease-out forwards;
@@ -289,4 +374,66 @@ body {
   border: 1px solid rgb(var(--gray-border));
   border-radius: 0.125rem 1rem 1rem 1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Poprawki dla zawartości Markdown w wiadomościach użytkownika */
+.message-user .markdown-content h1,
+.message-user .markdown-content h2,
+.message-user .markdown-content h3,
+.message-user .markdown-content h4,
+.message-user .markdown-content h5,
+.message-user .markdown-content h6,
+.message-user .markdown-content p,
+.message-user .markdown-content li {
+  color: white;
+}
+
+.message-user .markdown-content code {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.message-user .markdown-content li::marker {
+  color: white;
+}
+
+.message-user .markdown-content blockquote {
+  border-left-color: white;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Ulepszenia dla tabeli */
+.markdown-content table.auto-layout {
+  table-layout: auto; /* Pozwala tabeli dostosować szerokość kolumn do zawartości */
+}
+
+.markdown-content table.fixed-layout {
+  table-layout: fixed; /* Stała szerokość kolumn, dobra dla równych tabel */
+}
+
+.markdown-content table.compact {
+  font-size: 0.85rem;
+}
+
+.markdown-content table.compact th,
+.markdown-content table.compact td {
+  padding: 0.5rem;
+}
+
+/* Style dla list elementów z emoji lub ikonami */
+.markdown-content ul.emoji-list {
+  list-style-type: none;
+  margin-left: 0.5rem;
+}
+
+.markdown-content ul.emoji-list li {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.markdown-content ul.emoji-list li::before {
+  position: absolute;
+  left: 0;
+  content: "✓";
+  color: rgb(var(--primary));
 }

@@ -1,5 +1,6 @@
 // src/app/layout.tsx
 import './globals.css';
+import 'github-markdown-css/github-markdown.css';
 import { Inter } from 'next/font/google';
 import type { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';

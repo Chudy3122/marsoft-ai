@@ -4,8 +4,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Message } from '../types';
-import ChatMessage from './ChatMessage';
 import ReactMarkdown from 'react-markdown';
+import Image from 'next/image';
+import { getOpenAIResponse } from '@/lib/openai-service';
 
 const Chat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -54,7 +55,19 @@ const Chat: React.FC = () => {
       
       // Automatycznie generujemy odpowiedź na przesłany dokument
       setTimeout(async () => {
-        await typeMessage("Dziękuję za przesłanie dokumentu. Przeanalizowałem jego zawartość. W czym dokładnie mogę pomóc w związku z tym dokumentem? Czy masz konkretne pytania dotyczące jego treści lub chciałbyś, żebym wyjaśnił jakieś elementy?");
+        await typeMessage(`## Analiza dokumentu
+
+- Dziękuję za przesłanie dokumentu
+- Przeanalizowałem jego zawartość
+- Teraz mogę pomóc w związku z tym dokumentem
+
+### Możliwe działania:
+
+1. Odpowiedzieć na pytania dotyczące treści
+2. Wyjaśnić poszczególne elementy
+3. Zaproponować usprawnienia lub modyfikacje
+
+W czym dokładnie mogę pomóc w związku z tym dokumentem?`);
       }, 1000);
     };
     
@@ -82,7 +95,7 @@ const Chat: React.FC = () => {
         // Dodaj odpowiedź bota
         const botMessage: Message = {
           id: uuidv4(),
-          text: text,
+          text, // Zachowaj oryginalny format Markdown
           sender: 'bot',
           timestamp: new Date()
         };
@@ -96,30 +109,36 @@ const Chat: React.FC = () => {
   // Funkcja do rzeczywistego przetwarzania wiadomości przez API
   const processMessage = async (message: string): Promise<string> => {
     try {
-      // Tutaj możemy zaimplementować rzeczywiste wywołanie API
-      // Przykładowa integracja z OpenAI API
-      
-      // Dla celów demo, używamy prostego lokalnego przetwarzania
-      if (message.toLowerCase().includes('pdf') || message.toLowerCase().includes('dokument')) {
-        return "Widzę, że chcesz analizować dokument PDF. Możesz wgrać plik w zakładce 'Wgraj dokument', a następnie kliknąć 'Analizuj w czacie', aby przesłać jego zawartość tutaj.";
-      } else if (message.toLowerCase().includes('wniosek')) {
-        return "Mogę pomóc Ci w przygotowaniu wniosku o dofinansowanie. Dostępne są różne rodzaje wniosków w zależności od programu operacyjnego. Czy interesuje Cię konkretny program, np. EFS, EFRR, czy może jakiś regionalny program operacyjny?";
-      } else if (message.toLowerCase().includes('raport')) {
-        return "W kwestii raportów projektowych, mogę pomóc z raportami okresowymi, końcowymi oraz sprawozdaniami z realizacji wskaźników. Który rodzaj raportu Cię interesuje?";
-      } else if (message.toLowerCase().includes('harmonogram')) {
-        return "Harmonogram projektu jest kluczowym elementem dokumentacji. Mogę pomóc Ci stworzyć harmonogram zgodny z metodologią zarządzania projektami UE, uwzględniający kamienie milowe, zadania i ich zależności. Od czego chciałbyś zacząć?";
-      } else if (message.toLowerCase().includes('budżet')) {
-        return "Przygotowanie budżetu projektu UE wymaga szczegółowego rozpisania wszystkich kategorii kosztów. Mogę pomóc Ci stworzyć budżet z podziałem na koszty bezpośrednie, pośrednie, cross-financing i wkład własny. Jakie działania planujesz w projekcie?";
-      } else if (message.toLowerCase().includes('termin')) {
-        return "Terminy składania wniosków zależą od konkretnego naboru i programu operacyjnego. Aktualnie trwają nabory w ramach programów: Fundusze Europejskie dla Rozwoju Społecznego 2021-2027, Fundusze Europejskie na Infrastrukturę, Klimat, Środowisko 2021-2027. Który program Cię interesuje?";
-      } else if (message.toLowerCase().includes('analizę dokumentu')) {
-        return "Widzę, że przesłałeś dokument do analizy. Przejrzałem jego zawartość i mogę pomóc w interpretacji zawartych w nim informacji. O które konkretnie elementy dokumentu chciałbyś dopytać?";
-      } else {
-        return "Jako MarsoftAI specjalizuję się w pomocy przy tworzeniu dokumentacji projektów UE. Mogę pomóc Ci z wnioskami o dofinansowanie, raportami, harmonogramami, budżetami i innymi dokumentami projektu. Powiedz mi, nad jakim dokumentem chciałbyś pracować?";
-      }
+      // Prawdziwe wywołanie API OpenAI
+      const response = await getOpenAIResponse(message);
+      console.log('Odpowiedź z API OpenAI:', response); // Dodajemy log
+      return response;
     } catch (error) {
       console.error('Błąd podczas przetwarzania wiadomości:', error);
-      return "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Proszę spróbować ponownie.";
+      return "## Przepraszam\n\nWystąpił błąd podczas przetwarzania Twojego zapytania. Proszę spróbować ponownie.";
+    }
+  };
+
+  // Funkcja do mapowania pomiędzy interfejsem Message a modelem Prisma
+  const saveMessageToDb = async (message: Message) => {
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: message.text,        // Mapowanie text → content
+          role: message.sender === 'bot' ? 'assistant' : 'user',  // Mapowanie sender → role
+          chatId: 'aktualny-id-czatu'   // Tutaj trzeba podać właściwe ID czatu
+        }),
+      });
+      
+      if (!response.ok) {
+        console.error('Błąd podczas zapisywania wiadomości:', await response.text());
+      }
+    } catch (error) {
+      console.error('Wyjątek podczas zapisywania wiadomości:', error);
     }
   };
 
@@ -143,10 +162,12 @@ const Chat: React.FC = () => {
     try {
       // Przetwórz wiadomość użytkownika
       const response = await processMessage(inputValue);
+      
+      // Pokaż efekt pisania
       await typeMessage(response);
     } catch (error) {
       console.error('Błąd podczas przetwarzania wiadomości:', error);
-      await typeMessage("Przepraszam, wystąpił błąd podczas przetwarzania twojego zapytania. Proszę spróbować ponownie.");
+      await typeMessage("## Przepraszam\n\nWystąpił błąd podczas przetwarzania Twojego zapytania. Proszę spróbować ponownie.");
     } finally {
       setIsLoading(false);
     }
@@ -162,9 +183,118 @@ const Chat: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
+      {/* Dodaj style CSS dla formatowania Markdown */}
+      <style jsx global>{`
+        /* Style dla zawartości Markdown */
+        .markdown-content {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          line-height: 1.6;
+          overflow-wrap: break-word;
+        }
+        
+        .markdown-content ul {
+          list-style-type: disc;
+          margin-left: 1.5rem;
+          margin-bottom: 0.75rem;
+        }
+        
+        .markdown-content ol {
+          list-style-type: decimal;
+          margin-left: 1.5rem;
+          margin-bottom: 0.75rem;
+        }
+        
+        .markdown-content li {
+          margin-bottom: 0.25rem;
+          line-height: 1.5;
+          display: list-item;
+        }
+        
+        .markdown-content h2 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin-top: 1rem;
+          margin-bottom: 0.5rem;
+        }
+        
+        .markdown-content h3 {
+          font-size: 1.125rem;
+          font-weight: 500;
+          margin-top: 0.75rem;
+          margin-bottom: 0.5rem;
+        }
+        
+        .markdown-content p {
+          margin-bottom: 0.75rem;
+          line-height: 1.5;
+        }
+        
+        .markdown-content strong {
+          font-weight: 700;
+        }
+        
+        /* Dodatkowe style dla list zagnieżdżonych */
+        .markdown-content ul ul,
+        .markdown-content ol ol,
+        .markdown-content ol ul,
+        .markdown-content ul ol {
+          margin-top: 0.25rem;
+          margin-bottom: 0.25rem;
+        }
+        
+        /* Dodatkowe style dla separatorów poziomych */
+        .markdown-content hr {
+          border: 0;
+          border-top: 1px solid #e5e7eb;
+          margin: 1rem 0;
+        }
+      `}</style>
+      
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
+          <div key={message.id} className={`flex ${message.sender === 'bot' ? 'justify-start' : 'justify-end'} mb-4`}>
+            {message.sender === 'bot' && (
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-blue-100 flex-shrink-0 mr-2">
+                <div className="relative w-full h-full">
+                  <Image 
+                    src="/MarsoftAI.png" 
+                    alt="MarsoftAI" 
+                    width={32}
+                    height={32}
+                    style={{ objectFit: 'cover', width: '100%', height: '100%' }}
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div className={`max-w-[75%] ${message.sender !== 'bot' && 'order-1'}`}>
+              <div className={`rounded-t-lg ${
+                message.sender === 'bot' ? 'rounded-br-lg bg-white border border-gray-200' : 'rounded-bl-lg bg-blue-600 text-white'
+              } px-4 py-3 shadow-sm`}>
+                {message.sender === 'bot' ? (
+                  <div className="markdown-content">
+                    <ReactMarkdown>
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="text-white whitespace-pre-line">
+                    {message.text}
+                  </div>
+                )}
+              </div>
+              
+              <div className={`text-xs text-gray-500 mt-1 ${message.sender === 'bot' ? 'text-left' : 'text-right'}`}>
+                {new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' }).format(message.timestamp)}
+              </div>
+            </div>
+            
+            {message.sender !== 'bot' && (
+              <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center flex-shrink-0 ml-2">
+                <span className="text-sm font-medium">U</span>
+              </div>
+            )}
+          </div>
         ))}
         {isTyping && (
           <div className="flex items-center space-x-2 text-gray-500 px-4 py-2 rounded-lg bg-gray-100 max-w-[80%]">

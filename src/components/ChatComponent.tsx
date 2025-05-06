@@ -13,6 +13,8 @@ import KnowledgeLibraryButton from '@/components/KnowledgeLibraryButton';
 import ActiveDocumentsBanner from '@/components/ActiveDocumentsBanner';
 import KnowledgeLibraryPanel from './KnowledgeLibraryPanel';
 import RenameDialog from '@/components/RenameDialog';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Definicja typów
 interface Message {
@@ -1189,7 +1191,17 @@ export default function ChatComponent() {
                 boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 border: message.sender === 'bot' ? '1px solid #e5e7eb' : 'none'
               }}>
-                <div>{message.text}</div>
+                {message.sender === 'bot' ? (
+                  <div className="markdown-content">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div>
+                    {message.text}
+                  </div>
+                )}
                 <div style={{
                   fontSize: '12px',
                   color: message.sender === 'user' ? 'rgba(255, 255, 255, 0.8)' : '#9ca3af',

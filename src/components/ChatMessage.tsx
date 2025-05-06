@@ -1,10 +1,11 @@
 'use client';
 
-// src/components/ChatMessage.tsx
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import React from 'react';
 import { Message } from '../types';
-import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
+import ReactMarkdown from 'react-markdown';
 
 interface ChatMessageProps {
   message: Message;
@@ -38,14 +39,22 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       )}
       
       <div className={`max-w-[75%] ${!isBot && 'order-1'}`}>
-        <div className={`rounded-t-lg ${
-          isBot ? 'rounded-br-lg bg-white border border-gray-200' : 'rounded-bl-lg bg-blue-600 text-white'
-        } px-4 py-3 shadow-sm`}>
-          <div className="prose max-w-none">
-            <ReactMarkdown>
+        <div 
+          className={`rounded-t-lg ${
+            isBot ? 'rounded-br-lg bg-white border border-gray-200' : 'rounded-bl-lg bg-blue-600 text-white'
+          } px-4 py-3 shadow-sm`}
+        >
+          {isBot ? (
+            <div className="markdown-content">
+              <ReactMarkdown>
+                {text}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <div className="text-white whitespace-pre-line">
               {text}
-            </ReactMarkdown>
-          </div>
+            </div>
+          )}
         </div>
         
         <div className={`text-xs text-gray-500 mt-1 ${isBot ? 'text-left' : 'text-right'}`}>
