@@ -211,7 +211,7 @@ ${pdfText.substring(0, 3000)}...
     return improveMarkdownFormatting(response);
   } catch (error) {
     console.error('Błąd podczas analizy PDF z OpenAI:', error);
-    return "Przepraszam, wystąpił błąd podczas analizy dokumentu. Spróbuj ponownie później.";
+    return "Przepraszam, wystąpił błąd podczas analizy dokumentu. Spróbuj ponownie później :(.";
   }
 }
 
