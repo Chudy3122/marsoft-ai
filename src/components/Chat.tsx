@@ -6,7 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { Message } from '../types';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
-import { getOpenAIResponse } from '@/lib/openai-service';
+import { getOpenAIResponseWithWebSearch } from '@/lib/openai-service';
+
 
 const Chat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -110,7 +111,7 @@ W czym dokładnie mogę pomóc w związku z tym dokumentem?`);
   const processMessage = async (message: string): Promise<string> => {
     try {
       // Prawdziwe wywołanie API OpenAI
-      const response = await getOpenAIResponse(message);
+      const response = await getOpenAIResponseWithWebSearch(message, [], true);
       console.log('Odpowiedź z API OpenAI:', response); // Dodajemy log
       return response;
     } catch (error) {
