@@ -17,9 +17,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   
-  // Dodajemy efekt do sprawdzania sesji
   useEffect(() => {
-    // Jeśli użytkownik jest już zalogowany, przekieruj na stronę główną
     if (status === "authenticated" && session) {
       console.log("Użytkownik już zalogowany, przekierowuję na stronę główną");
       router.push('/');
@@ -35,7 +33,6 @@ export default function LoginPage() {
     console.log("Próba logowania:", { email, password: '********' });
     
     try {
-      // Bezpośrednie logowanie przez NextAuth
       const result = await signIn('credentials', {
         redirect: false,
         email,
@@ -65,18 +62,6 @@ export default function LoginPage() {
     }
   };
 
-  // Funkcja do szybkiego wypełnienia danych testowych
-  const fillTestCredentials = (userType: 'admin' | 'user') => {
-    if (userType === 'admin') {
-      setEmail('admin@marsoft.pl');
-      setPassword('admin123');
-    } else {
-      setEmail('user@marsoft.pl');
-      setPassword('test123');
-    }
-  };
-
-  // Jeśli trwa weryfikacja statusu sesji, pokazujemy ładowanie
   if (status === "loading") {
     return (
       <div style={{ 
@@ -93,8 +78,6 @@ export default function LoginPage() {
     );
   }
 
-  // Jeśli użytkownik jest zalogowany, powinien zostać przekierowany przez useEffect
-  // ale na wszelki wypadek również tutaj blokujemy renderowanie formularza logowania
   if (status === "authenticated") {
     return null;
   }
@@ -104,22 +87,72 @@ export default function LoginPage() {
       display: 'flex', 
       minHeight: '100vh',
       backgroundColor: '#f9f9f9',
-      flexDirection: 'column'  // Zmieniamy na kolumnę na małych ekranach
+      flexDirection: 'column',
+      position: 'relative',
+      overflow: 'hidden'
     }}>
+      {/* Ozdobne elementy tła */}
+      <div style={{
+        position: 'absolute',
+        width: '300px',
+        height: '300px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(163,205,57,0.1) 0%, rgba(163,205,57,0.05) 70%, rgba(163,205,57,0) 100%)',
+        top: '-100px',
+        left: '-100px',
+        zIndex: 0
+      }} />
+      
+      <div style={{
+        position: 'absolute',
+        width: '400px',
+        height: '400px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(163,205,57,0.08) 0%, rgba(163,205,57,0.04) 70%, rgba(163,205,57,0) 100%)',
+        bottom: '-150px',
+        right: '-150px',
+        zIndex: 0
+      }} />
+      
+      <div style={{
+        position: 'absolute',
+        width: '50px',
+        height: '50px',
+        borderRadius: '50%',
+        backgroundColor: 'rgba(163,205,57,0.1)',
+        top: '20%',
+        right: '15%',
+        zIndex: 0
+      }} />
+      
+      <div style={{
+        position: 'absolute',
+        width: '35px',
+        height: '35px',
+        borderRadius: '50%',
+        backgroundColor: 'rgba(163,205,57,0.1)',
+        bottom: '25%',
+        left: '10%',
+        zIndex: 0
+      }} />
+
       <div style={{
         display: 'flex',
         flexDirection: 'row',
         flex: 1,
-        flexWrap: 'wrap'  // Pozwala na zawijanie na mniejszych ekranach
+        flexWrap: 'wrap',
+        position: 'relative',
+        zIndex: 1
       }}>
         {/* Lewa kolumna z formularzem */}
         <div style={{ 
           flex: '1',
-          minWidth: '300px',  // Minimalna szerokość
+          minWidth: '300px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: '2rem'
+          padding: '2rem',
+          position: 'relative'
         }}>
           <div style={{ 
             maxWidth: '400px',
@@ -249,46 +282,18 @@ export default function LoginPage() {
                   fontWeight: '500',
                   cursor: 'pointer',
                   opacity: loading ? 0.7 : 1,
-                  transition: 'opacity 0.2s',
+                  transition: 'opacity 0.2s, transform 0.2s',
                   display: 'flex',
                   justifyContent: 'center',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  transform: loading ? 'scale(0.98)' : 'scale(1)'
                 }}
               >
                 {loading ? 'Logowanie...' : 'Zaloguj się'}
               </button>
             </form>
 
-            <div style={{ 
-              marginTop: '24px',
-              padding: '16px',
-              backgroundColor: '#f3f4f6',
-              borderRadius: '6px',
-              fontSize: '14px',
-              color: '#4b5563'
-            }}>
-              <p style={{ marginBottom: '8px', fontWeight: '500' }}>
-                Dane testowe:
-              </p>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-                
-                <button
-                  onClick={() => fillTestCredentials('user')}
-                  style={{
-                    padding: '5px 10px',
-                    backgroundColor: '#e5e7eb',
-                    border: 'none',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  user@marsoft.pl / test123
-                </button>
-              </div>
-            </div>
-
-            {/* Obszar informacji debugowania - pomocny przy rozwiązywaniu problemów */}
             {debugInfo && (
               <div style={{ 
                 marginTop: '24px',
@@ -319,11 +324,50 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* Separator między kolumnami */}
+        <div style={{
+          width: '1px',
+          margin: '2rem 0',
+          background: 'linear-gradient(to bottom, rgba(163,205,57,0), rgba(163,205,57,0.3) 30%, rgba(163,205,57,0.3) 70%, rgba(163,205,57,0))',
+          alignSelf: 'stretch',
+          position: 'relative',
+          zIndex: 2
+        }}>
+          {/* Kropki na separatorze */}
+          <div style={{
+            position: 'absolute',
+            width: '10px',
+            height: '10px',
+            backgroundColor: '#a3cd39',
+            borderRadius: '50%',
+            top: '25%',
+            left: '-4.5px'
+          }} />
+          <div style={{
+            position: 'absolute',
+            width: '10px',
+            height: '10px',
+            backgroundColor: '#a3cd39',
+            borderRadius: '50%',
+            top: '50%',
+            left: '-4.5px'
+          }} />
+          <div style={{
+            position: 'absolute',
+            width: '10px',
+            height: '10px',
+            backgroundColor: '#a3cd39',
+            borderRadius: '50%',
+            top: '75%',
+            left: '-4.5px'
+          }} />
+        </div>
+
         {/* Prawa kolumna z logo i grafiką */}
         <div style={{ 
           flex: '1',
-          minWidth: '300px',  // Minimalna szerokość
-          backgroundColor: 'white',
+          minWidth: '300px',
+          backgroundColor: '#f9f9f9',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -349,23 +393,115 @@ export default function LoginPage() {
                 priority
               />
             </div>
-            <h2 style={{ 
-              fontSize: '36px',
-              fontWeight: '700',
-              color: '#333d3d',
-              marginBottom: '16px'
-            }}>
-              
-            </h2>
+            
             <p style={{ 
               fontSize: '18px',
               color: '#6b7280',
-              maxWidth: '400px'
+              maxWidth: '400px',
+              marginBottom: '24px'
             }}>
               Twój inteligentny asystent do tworzenia i zarządzania dokumentacją projektów UE.
             </p>
+            
+            {/* Funkcje asystenta */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              textAlign: 'left',
+              marginTop: '16px',
+              padding: '16px',
+              backgroundColor: 'rgba(255, 255, 255, 0.7)',
+              borderRadius: '8px',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)'
+            }}>
+              <h3 style={{ 
+                fontSize: '16px', 
+                color: '#4b5563', 
+                fontWeight: '600',
+                marginBottom: '4px'
+              }}>
+                Asystent MarsoftAI pomoże Ci:
+              </h3>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ 
+                  width: '20px', 
+                  height: '20px', 
+                  backgroundColor: '#a3cd39', 
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
+                </div>
+                <span style={{ fontSize: '14px', color: '#4b5563' }}>Tworzyć profesjonalną dokumentację projektową</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ 
+                  width: '20px', 
+                  height: '20px', 
+                  backgroundColor: '#a3cd39', 
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
+                </div>
+                <span style={{ fontSize: '14px', color: '#4b5563' }}>Analizować i generować harmonogramy</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ 
+                  width: '20px', 
+                  height: '20px', 
+                  backgroundColor: '#a3cd39', 
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
+                </div>
+                <span style={{ fontSize: '14px', color: '#4b5563' }}>Przygotować budżety i zestawienia finansowe</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ 
+                  width: '20px', 
+                  height: '20px', 
+                  backgroundColor: '#a3cd39', 
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
+                </div>
+                <span style={{ fontSize: '14px', color: '#4b5563' }}>Odpowiadać na pytania o fundusze europejskie</span>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
+      
+      {/* Stopka */}
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '12px',
+        borderTop: '1px solid #e5e7eb',
+        color: '#9ca3af',
+        fontSize: '12px',
+        backgroundColor: 'rgba(255, 255, 255, 0.5)'
+      }}>
+        &copy; {new Date().getFullYear()} MarsoftAI - Wszelkie prawa zastrzeżone
       </div>
     </div>
   );

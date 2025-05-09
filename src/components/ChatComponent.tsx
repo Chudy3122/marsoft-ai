@@ -57,7 +57,7 @@ export default function ChatComponent() {
   const [chatToRename, setChatToRename] = useState<{id: string, title: string} | null>(null);
   const [showRenameInput, setShowRenameInput] = useState(false);
   const [newChatName, setNewChatName] = useState("");
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   // Pobieranie historii czatów
   useEffect(() => {
@@ -90,7 +90,8 @@ export default function ChatComponent() {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
-            setWebSearchEnabled(data.webSearchEnabled);
+            // Jeśli ustawienie istnieje w bazie, użyj go, w przeciwnym razie zachowaj domyślne false
+            setWebSearchEnabled(data.webSearchEnabled !== undefined ? data.webSearchEnabled : false);
           }
         }
       } catch (error) {
@@ -1114,36 +1115,44 @@ export default function ChatComponent() {
           }}>
 
           {/* Przycisk włączania/wyłączania wyszukiwania */}
-          <button
-            onClick={toggleWebSearch}
-            title={webSearchEnabled ? "Wyłącz wyszukiwanie w internecie" : "Włącz wyszukiwanie w internecie"}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '8px',
-              borderRadius: '8px',
-              backgroundColor: webSearchEnabled ? 'rgba(163, 205, 57, 0.1)' : 'transparent',
-              border: webSearchEnabled ? '1px solid rgba(163, 205, 57, 0.3)' : '1px solid #e5e7eb',
-              cursor: 'pointer'
-            }}
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="20" 
-              height="20" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke={webSearchEnabled ? '#a3cd39' : 'currentColor'} 
-              strokeWidth="2" 
-              strokeLinecap="round" 
-              strokeLinejoin="round"
+            <button
+              onClick={toggleWebSearch}
+              title={webSearchEnabled ? "Wyłącz wyszukiwanie w internecie" : "Włącz wyszukiwanie w internecie"}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '8px 12px', // Zwiększone padding dla miejsca na tekst
+                borderRadius: '8px',
+                backgroundColor: webSearchEnabled ? 'rgba(163, 205, 57, 0.1)' : 'transparent',
+                border: webSearchEnabled ? '1px solid rgba(163, 205, 57, 0.3)' : '1px solid #e5e7eb',
+                cursor: 'pointer',
+                gap: '6px' // Dodane odstępy między ikoną a tekstem
+              }}
             >
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              {!webSearchEnabled && <line x1="4" y1="18" x2="18" y2="4" stroke="red" strokeWidth="2"></line>}
-            </svg>
-          </button>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="18" 
+                height="18" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke={webSearchEnabled ? '#a3cd39' : 'currentColor'} 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                {!webSearchEnabled && <line x1="4" y1="18" x2="18" y2="4" stroke="red" strokeWidth="2"></line>}
+              </svg>
+              <span style={{ 
+                fontSize: '13px', 
+                fontWeight: '500',
+                color: webSearchEnabled ? '#4b5563' : '#4b5563'
+              }}>
+                {webSearchEnabled ? 'Wyłącz wyszukiwanie' : 'Włącz wyszukiwanie'}
+              </span>
+            </button>
              {/* Przycisk biblioteki wiedzy */}
             <KnowledgeLibraryButton
               currentChatId={currentChatId}

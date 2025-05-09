@@ -27,10 +27,13 @@ yarn-error.log*
 .env*.local
 .env*
 
-
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# skrypty użytkowników
+add-users.js
+scripts/add-users.js
