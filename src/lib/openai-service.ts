@@ -1,11 +1,69 @@
 // src/lib/openai-service.ts
 import OpenAI from 'openai';
+import type { ChatCompletionMessageParam } from 'openai/resources';
 
 // Inicjalizacja klienta OpenAI z kluczem API
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true
 });
+
+// Definicje funkcji wyszukiwania dla OpenAI
+const searchFunctionDefinition = {
+  name: "search",
+  description: "Wyszukuje informacje w internecie.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "Zapytanie wyszukiwania"
+      }
+    },
+    required: ["query"]
+  }
+};
+
+const fetchUrlFunctionDefinition = {
+  name: "fetch_url",
+  description: "Pobiera treść strony internetowej.",
+  parameters: {
+    type: "object",
+    properties: {
+      url: {
+        type: "string",
+        description: "URL strony internetowej do pobrania"
+      }
+    },
+    required: ["url"]
+  }
+};
+
+/**
+ * Funkcja do sprawdzania, czy zapytanie może wymagać wyszukiwania w sieci
+ */
+function shouldSearchWeb(query: string): boolean {
+  // Wzorce dla zapytań, które mogą wymagać aktualnych informacji
+  const searchPatterns = [
+    /aktualne/i, /najnowsze/i, /ostatnie/i, /bieżące/i, /teraz/i, /dziś/i, /wczoraj/i,
+    /wyszukaj/i, /znajdź/i, /szukaj/i, /google/i, /poszukaj/i,
+    /sprawdź/i, /zobacz/i, /informacje o/i, /dowiedz się/i,
+    /strona/i, /witryna/i, /WWW/i, /http/i, /link/i, /URL/i,
+    /termin/i, /konkurs/i, /nabór/i, /ogłoszenie/i,
+    /program/i, /UE/i, /unijny/i, /europejski/i,
+    /rozporządzenie/i, /ustawa/i, /dokument/i, /przepis/i,
+    /2023/i, /2024/i, /2025/i // Aktualne i przyszłe lata
+  ];
+  
+  // Sprawdź, czy zapytanie zawiera URL
+  const urlPattern = /https?:\/\/[^\s]+/;
+  const hasUrl = urlPattern.test(query);
+  
+  // Sprawdź, czy zapytanie pasuje do wzorców wyszukiwania
+  const matchesSearchPattern = searchPatterns.some(pattern => pattern.test(query));
+  
+  return hasUrl || matchesSearchPattern;
+}
 
 /**
  * Pobiera dokument z bazy danych na podstawie ID
@@ -115,20 +173,36 @@ function improveMarkdownFormatting(markdown: string): string {
  * Funkcja do pobierania odpowiedzi od OpenAI
  * @param prompt Zapytanie do API
  * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy i/lub bazy danych
+ * @param enableWebSearch Opcjonalne włączenie wyszukiwania w sieci (domyślnie false, bo ta funkcja nie korzysta z wyszukiwania)
  * @returns Odpowiedź od API
  */
-export async function getOpenAIResponse(prompt: string, documentIds: string[] = []): Promise<string> {
+export async function getOpenAIResponseWithManualSearch(
+  prompt: string,
+  documentIds: string[] = [],
+  enableWebSearch: boolean = true,
+  forceManualSearch: boolean = false
+): Promise<string> {
   try {
-    // Pobierz treść dokumentów, jeśli są
     let documentsContext = "";
     if (documentIds.length > 0) {
       documentsContext = await getDocumentsContent(documentIds);
       console.log("Długość kontekstu dokumentów:", documentsContext.length);
-      // Możesz też zalogować pierwsze 200 znaków kontekstu aby zobaczyć co jest przekazywane
       console.log("Początek kontekstu:", documentsContext.substring(0, 200) + "...");
     }
 
-    const systemPrompt = `Jesteś asystentem MarsoftAI, specjalistą od projektów UE. Pomagasz w tworzeniu dokumentacji projektowej, odpowiadasz na pytania związane z funduszami europejskimi, i doradzasz w kwestiach pisania wniosków, raportów, harmonogramów i budżetów. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+    let manualSearchContent = "";
+
+    if (enableWebSearch && (forceManualSearch || shouldSearchWeb(prompt))) {
+      console.log("[Manual Search] Wykonywanie ręcznego wyszukiwania dla:", prompt);
+      const searchResults = await performSearch(prompt);
+      manualSearchContent = `\n\nWyniki wyszukiwania:\n${JSON.stringify(searchResults, null, 2)}`;
+    }
+
+    const userPromptWithContext = `${documentsContext}\n${manualSearchContent}\n\nPytanie użytkownika: ${prompt}\n\nOdpowiedz na podstawie dostarczonych informacji.`;
+
+    const systemPrompt = `Jesteś asystentem MarsoftAI, pomocnym i wszechstronnym asystentem. Twoją specjalizacją są projekty UE, dokumentacja projektowa i fundusze europejskie, ale możesz też odpowiadać na inne pytania związane z pracą i ogólnie przydatną wiedzą. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+
+${enableWebSearch ? 'Masz możliwość wyszukiwania informacji w internecie, aby zapewnić aktualne i dokładne odpowiedzi.' : 'Opieraj się na swoich wewnętrznych informacjach i udostępnionych dokumentach.'}
 
 FORMATOWANIE: Używaj składni Markdown, aby zapewnić dobrą czytelność odpowiedzi:
 1. Wszystkie listy punktowane formatuj używając myślników (-) i nowej linii dla każdego punktu
@@ -137,6 +211,124 @@ FORMATOWANIE: Używaj składni Markdown, aby zapewnić dobrą czytelność odpow
 4. Wydzielaj poszczególne sekcje pustymi liniami
 5. Używaj **pogrubienia** dla ważnych terminów i pojęć
 6. Nigdy nie używaj punktów oddzielonych tylko spacjami - zawsze używaj właściwego formatowania Markdown z nowymi liniami
+${enableWebSearch ? '7. Jeśli podajesz informacje znalezione w internecie, zawsze podawaj źródła w formie linków.' : ''}
+
+Jeśli użytkownik załączył jakieś dokumenty, to ważne, abyś bazował na ich treści w swojej odpowiedzi. Dokumenty są bardzo ważnym kontekstem dla Twoich odpowiedzi.
+
+ZASADY ODPOWIADANIA:
+- NIE odpowiadaj na pytania obraźliwe, niemoralne, nielegalne lub wyraźnie szkodliwe.
+- NIE odpowiadaj na żądania tworzenia treści dla dorosłych, propagandy lub dezinformacji.
+- NIE odpowiadaj na absolutne bzdury i treści pozbawione jakiegokolwiek sensu.
+- Odpowiadaj na pytania związane z tematami zawodowymi, edukacyjnymi i ogólnie przydatnymi.
+- Możesz odpowiadać na pytania o tematy niezwiązane bezpośrednio z projektami UE, jeśli są związane z pracą lub wiedzą ogólną.
+- Staraj się być pomocny i udzielać rzetelnych informacji w rozsądnych granicach.`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-2024-04-16",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPromptWithContext }
+      ],
+      temperature: 1,
+      max_tokens: 4096
+    });
+
+    const rawResponse = response.choices[0]?.message?.content || "Brak odpowiedzi.";
+    return improveMarkdownFormatting(rawResponse);
+
+  } catch (error) {
+    console.error("Błąd podczas generowania odpowiedzi:", error);
+    return "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
+  }
+}
+
+/**
+ * Funkcja do wykonania wyszukiwania w sieci
+ */
+async function performSearch(query: string): Promise<any> {
+  try {
+    // Tutaj możesz zaimplementować rzeczywiste wyszukiwanie z API
+    // Na razie zwracamy uproszczone wyniki
+    return {
+      results: [
+        {
+          title: "Wynik wyszukiwania dla: " + query,
+          url: query.includes("http") ? query : "https://example.com/result",
+          snippet: "To jest przykładowy fragment wyników wyszukiwania dla zapytania: " + query
+        }
+      ]
+    };
+  } catch (error) {
+    console.error("Błąd wyszukiwania:", error);
+    return { error: "Nie udało się wykonać wyszukiwania" };
+  }
+}
+
+/**
+ * Funkcja do pobierania treści strony
+ */
+export async function fetchWebContent(url: string): Promise<any> {
+  try {
+    const response = await fetch('/api/web-fetch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Błąd pobierania strony: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    // Używamy tylko 'snippet', który zawiera przetworzony i ograniczony tekst
+    return {
+      title: result.title,
+      url: result.url,
+      content: result.snippet || 'Brak dostępnej treści.'
+    };
+
+  } catch (error) {
+    console.error("Błąd pobierania strony:", error);
+    return { error: "Nie udało się pobrać treści strony" };
+  }
+}
+
+
+/**
+ * Funkcja do pobierania odpowiedzi od OpenAI z możliwością wyszukiwania w sieci
+ * @param prompt Zapytanie do API
+ * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy i/lub bazy danych
+ * @param enableWebSearch Czy włączyć wyszukiwanie w sieci
+ * @returns Odpowiedź od API
+ */
+export async function getOpenAIResponseWithWebSearch(
+  prompt: string, 
+  documentIds: string[] = [],
+  enableWebSearch: boolean = true
+): Promise<string> {
+  try {
+    // Pobierz treść dokumentów, jeśli są
+    let documentsContext = "";
+    if (documentIds.length > 0) {
+      documentsContext = await getDocumentsContent(documentIds);
+      console.log("Długość kontekstu dokumentów:", documentsContext.length);
+    }
+
+    const systemPrompt = `Jesteś asystentem MarsoftAI, specjalistą od projektów UE. Pomagasz w tworzeniu dokumentacji projektowej, odpowiadasz na pytania związane z funduszami europejskimi, i doradzasz w kwestiach pisania wniosków, raportów, harmonogramów i budżetów. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+
+${enableWebSearch ? 'Masz możliwość wyszukiwania informacji w internecie, aby zapewnić aktualne i dokładne odpowiedzi.' : 'Nie masz dostępu do internetu, więc opieraj się tylko na swoich wewnętrznych informacjach i udostępnionych dokumentach.'}
+
+FORMATOWANIE: Używaj składni Markdown, aby zapewnić dobrą czytelność odpowiedzi:
+1. Wszystkie listy punktowane formatuj używając myślników (-) i nowej linii dla każdego punktu
+2. Wszystkie listy numerowane formatuj jako 1., 2., itd., zawsze w nowej linii
+3. Używaj nagłówków (## dla głównych sekcji, ### dla podsekcji)
+4. Wydzielaj poszczególne sekcje pustymi liniami
+5. Używaj **pogrubienia** dla ważnych terminów i pojęć
+6. Nigdy nie używaj punktów oddzielonych tylko spacjami - zawsze używaj właściwego formatowania Markdown z nowymi liniami
+${enableWebSearch ? '7. Jeśli podajesz informacje znalezione w internecie, zawsze podawaj źródła w formie linków.' : ''}
 
 Jeśli użytkownik załączył jakieś dokumenty, to ważne, abyś bazował na ich treści w swojej odpowiedzi. Dokumenty są bardzo ważnym kontekstem dla Twoich odpowiedzi.
 
@@ -147,17 +339,97 @@ BARDZO WAŻNE: Odpowiadaj TYLKO na pytania związane z pracą, projektami UE, do
       ? `Dokumenty referencyjne:\n${documentsContext}\n\nPytanie użytkownika: ${prompt}\n\nOdpowiedz na podstawie dostarczonych dokumentów i swojej wiedzy ogólnej. Pamiętaj o prawidłowym formatowaniu Markdown.`
       : `${prompt}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
 
-    const response = await openai.chat.completions.create({
-      model: "o4-mini-2025-04-16",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPromptWithContext }
-      ],
-      temperature: 1,
-      max_completion_tokens: 60000,
-    });
+    // Sprawdź, czy zapytanie może wymagać wyszukiwania w sieci i czy wyszukiwanie jest włączone
+    const shouldUseWebSearch = enableWebSearch && shouldSearchWeb(prompt);
+    
+    let response;
+    
+    if (shouldUseWebSearch) {
+      console.log("Używam wyszukiwania w sieci dla zapytania:", prompt);
+      // Użyj modelu z dostępem do funkcji wyszukiwania
+      response = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPromptWithContext }
+        ],
+        temperature: 1,
+        max_tokens: 4096,
+        tools: [
+          { type: "function", function: searchFunctionDefinition },
+          { type: "function", function: fetchUrlFunctionDefinition }
+        ],
+        tool_choice: "auto"
+      });
+      
+      // Sprawdź, czy model chce użyć narzędzia
+      const message = response.choices[0].message;
+      
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        console.log("Model chce użyć narzędzia:", message.tool_calls);
+        
+        // Przygotuj tablicę na wyniki narzędzi
+        const toolResults: ChatCompletionMessageParam[] = [];
+        
+        // Obsłuż każde wywołanie narzędzia
+        for (const toolCall of message.tool_calls) {
+          const functionName = toolCall.function.name;
+          const functionArgs = JSON.parse(toolCall.function.arguments);
+          
+          if (functionName === 'search') {
+            console.log("Wykonuję wyszukiwanie:", functionArgs.query);
+            const searchResults = await performSearch(functionArgs.query);
+            
+            toolResults.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(searchResults)
+            });
+          }
+          
+          if (functionName === 'fetch_url') {
+            console.log("Pobieram treść strony:", functionArgs.url);
+            const fetchResults = await fetchWebContent(functionArgs.url);
+            
+            toolResults.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(fetchResults)
+            });
+          }
+        }
+        
+        // Dodaj wyniki do wiadomości i uzyskaj ostateczną odpowiedź
+        const finalResponse = await openai.chat.completions.create({
+          model: "gpt-4-turbo-preview",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPromptWithContext },
+            message,
+            ...toolResults
+          ],
+          temperature: 1,
+          max_tokens: 4096,
+        });
+        
+        const finalContent = finalResponse.choices[0]?.message?.content || "Przepraszam, nie udało się uzyskać odpowiedzi.";
+        return improveMarkdownFormatting(finalContent);
+      }
+    } else {
+      console.log("Używam standardowego zapytania bez wyszukiwania w sieci");
+      // Użyj modelu bez dostępu do funkcji wyszukiwania
+      response = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPromptWithContext }
+        ],
+        temperature: 1,
+        max_tokens: 4096
+      });
+    }
 
-    // Pobierz tekst odpowiedzi
+    // Pobierz tekst odpowiedzi (wykonywane tylko jeśli nie było wywołań narzędzi)
     const rawResponse = response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
     
     // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
@@ -174,13 +446,15 @@ BARDZO WAŻNE: Odpowiadaj TYLKO na pytania związane z pracą, projektami UE, do
  * @param pdfMetadata Metadane PDF (nazwa, liczba stron, itp.)
  * @param query Zapytanie użytkownika
  * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy
+ * @param enableWebSearch Czy włączyć wyszukiwanie w internecie
  * @returns Odpowiedź od API
  */
 export async function analyzePdfWithOpenAI(
   pdfText: string, 
   pdfMetadata: any, 
   query: string, 
-  documentIds: string[] = []
+  documentIds: string[] = [],
+  enableWebSearch: boolean = true
 ): Promise<string> {
   try {
     // Pobierz treść dokumentów z biblioteki, jeśli są
@@ -205,7 +479,8 @@ ${pdfText.substring(0, 3000)}...
 
     fullContext += `\n## Na podstawie powyższej zawartości, odpowiedz na pytanie:\n${query}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
     
-    const response = await getOpenAIResponse(fullContext);
+    // Użyj funkcji z możliwością wyszukiwania
+    const response = await getOpenAIResponseWithWebSearch(fullContext, [], enableWebSearch);
     
     // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
     return improveMarkdownFormatting(response);
@@ -221,13 +496,15 @@ ${pdfText.substring(0, 3000)}...
  * @param excelMetadata Metadane Excel (nazwa, liczba arkuszy, wierszy, itp.)
  * @param query Zapytanie użytkownika
  * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy
+ * @param enableWebSearch Czy włączyć wyszukiwanie w internecie
  * @returns Odpowiedź od API
  */
 export async function analyzeExcelWithOpenAI(
   excelText: string, 
   excelMetadata: any, 
   query: string,
-  documentIds: string[] = []
+  documentIds: string[] = [],
+  enableWebSearch: boolean = true
 ): Promise<string> {
   try {
     // Pobierz treść dokumentów z biblioteki, jeśli są
@@ -256,7 +533,8 @@ ${excelText.substring(0, 3000)}...
 
     fullContext += `\n## Na podstawie powyższej zawartości, odpowiedz na pytanie:\n${query}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
     
-    const response = await getOpenAIResponse(fullContext);
+    // Użyj funkcji z możliwością wyszukiwania
+    const response = await getOpenAIResponseWithWebSearch(fullContext, [], enableWebSearch);
     
     // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
     return improveMarkdownFormatting(response);

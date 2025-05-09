@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String?
-  email     String   @unique
-  password  String
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  chats     Chat[]
+  id               String   @id @default(uuid())
+  name             String?
+  email            String   @unique
+  password         String
+  role             String   @default("user")
+  webSearchEnabled Boolean  @default(true)  // Dodane pole
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  chats            Chat[]
 }
 
 model Chat {

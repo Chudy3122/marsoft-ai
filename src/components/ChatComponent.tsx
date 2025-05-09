@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { v4 as uuidv4 } from 'uuid';
-import { getOpenAIResponse, analyzePdfWithOpenAI, analyzeExcelWithOpenAI } from '@/lib/openai-service';
+import { getOpenAIResponseWithManualSearch as getOpenAIResponse, analyzePdfWithOpenAI, analyzeExcelWithOpenAI, getOpenAIResponseWithWebSearch } from '@/lib/openai-service';
 import PdfUploadButton from '@/components/PdfUploadButton';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -57,6 +57,8 @@ export default function ChatComponent() {
   const [chatToRename, setChatToRename] = useState<{id: string, title: string} | null>(null);
   const [showRenameInput, setShowRenameInput] = useState(false);
   const [newChatName, setNewChatName] = useState("");
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+
   // Pobieranie historii czatów
   useEffect(() => {
     const fetchChats = async () => {
@@ -81,6 +83,26 @@ export default function ChatComponent() {
     fetchChats();
   }, [currentChatId]);
   
+  useEffect(() => {
+    const fetchUserSettings = async () => {
+      try {
+        const response = await fetch('/api/user/settings');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setWebSearchEnabled(data.webSearchEnabled);
+          }
+        }
+      } catch (error) {
+        console.error('Błąd podczas pobierania ustawień użytkownika:', error);
+      }
+    };
+    
+    if (session?.user) {
+      fetchUserSettings();
+    }
+  }, [session]);
+
   // Załadowanie wiadomości dla wybranego czatu
   useEffect(() => {
     if (currentChatId) {
@@ -289,6 +311,31 @@ export default function ChatComponent() {
     }
   };
 
+  const toggleWebSearch = async () => {
+    try {
+      const newValue = !webSearchEnabled;
+      
+      const response = await fetch('/api/user/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          webSearchEnabled: newValue
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setWebSearchEnabled(data.webSearchEnabled);
+        }
+      }
+    } catch (error) {
+      console.error('Błąd podczas aktualizacji ustawień użytkownika:', error);
+    }
+  };
+
   const handleExcelContent = (content: string, metadata: any) => {
     // Upewnij się, że mamy aktywny czat
     if (!currentChatId) {
@@ -403,6 +450,13 @@ export default function ChatComponent() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as any);  // Możesz dodać lepsze typowanie jeśli chcesz
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -540,7 +594,8 @@ export default function ChatComponent() {
       // Używamy zawsze aktywnych dokumentów jako głównego źródła informacji
       if (activeDocumentIds.length > 0) {
         console.log(`Używam ${activeDocumentIds.length} aktywnych dokumentów do zapytania AI`);
-        return await getOpenAIResponse(prompt, activeDocumentIds);
+        // Użyj nowej funkcji z parametrem webSearchEnabled
+        return await getOpenAIResponseWithWebSearch(prompt, activeDocumentIds, webSearchEnabled);
       } 
       // Jeśli nie ma aktywnych dokumentów, ale jest pojedynczy dokument wczytany
       else if (documentText && documentMetadata && documentChatId === currentChatId) {
@@ -554,9 +609,9 @@ export default function ChatComponent() {
         }
       }
       
-      // Standardowe zapytanie bez dokumentów
+      // Standardowe zapytanie bez dokumentów, ale z opcją wyszukiwania
       console.log("Używam standardowego zapytania bez dokumentów");
-      return await getOpenAIResponse(prompt);
+      return await getOpenAIResponseWithWebSearch(prompt, [], webSearchEnabled);
     } catch (error) {
       console.error("Błąd w getOpenAIResponse:", error);
       return "Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie za chwilę.";
@@ -1057,6 +1112,38 @@ export default function ChatComponent() {
             alignItems: 'center', 
             gap: '16px'
           }}>
+
+          {/* Przycisk włączania/wyłączania wyszukiwania */}
+          <button
+            onClick={toggleWebSearch}
+            title={webSearchEnabled ? "Wyłącz wyszukiwanie w internecie" : "Włącz wyszukiwanie w internecie"}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '8px',
+              borderRadius: '8px',
+              backgroundColor: webSearchEnabled ? 'rgba(163, 205, 57, 0.1)' : 'transparent',
+              border: webSearchEnabled ? '1px solid rgba(163, 205, 57, 0.3)' : '1px solid #e5e7eb',
+              cursor: 'pointer'
+            }}
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="20" 
+              height="20" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke={webSearchEnabled ? '#a3cd39' : 'currentColor'} 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              {!webSearchEnabled && <line x1="4" y1="18" x2="18" y2="4" stroke="red" strokeWidth="2"></line>}
+            </svg>
+          </button>
              {/* Przycisk biblioteki wiedzy */}
             <KnowledgeLibraryButton
               currentChatId={currentChatId}
@@ -1149,6 +1236,41 @@ export default function ChatComponent() {
           padding: '16px',
           backgroundColor: '#f9f9f9'
         }}>
+          <div style={{
+            backgroundColor: webSearchEnabled ? '#f0f9ff' : '#f9fafb',
+            border: `1px solid ${webSearchEnabled ? '#bae6fd' : '#e5e7eb'}`,
+            borderRadius: '4px',
+            padding: '5px',
+            margin: '10px 0',
+            fontSize: '12px',
+            textAlign: 'center',
+            color: webSearchEnabled ? '#0369a1' : '#6b7280',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="14" 
+              height="14" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              {!webSearchEnabled && <line x1="4" y1="18" x2="18" y2="4" stroke="currentColor" strokeWidth="2"></line>}
+            </svg>
+            <span>
+              {webSearchEnabled 
+                ? 'Wyszukiwanie w internecie włączone. Bot może korzystać z aktualnych danych z sieci.'
+                : 'Wyszukiwanie w internecie wyłączone. Bot korzysta tylko z dostępnych dokumentów i własnej wiedzy.'}
+            </span>
+          </div>
           {/* Banner aktywnych dokumentów */}
           <ActiveDocumentsBanner
             documentIds={activeDocumentIds}
@@ -1342,19 +1464,22 @@ export default function ChatComponent() {
           padding: '16px'
         }}>
           <form onSubmit={handleSubmit} style={{ position: 'relative' }}>
-            <input
-              value={inputValue}
-              onChange={handleInputChange}
-              placeholder="Napisz wiadomość..."
-              style={{
-                width: '100%',
-                padding: '12px 48px 12px 16px',
-                borderRadius: '12px',
-                border: '1px solid #d1d5db',
-                outline: 'none'
-              }}
-              disabled={isLoading}
-            />
+          <textarea
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Napisz wiadomość..."
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '12px 48px 12px 16px',
+              borderRadius: '12px',
+              border: '1px solid #d1d5db',
+              outline: 'none',
+              resize: 'none'
+            }}
+            disabled={isLoading}
+          />
             <button
               type="submit"
               style={{
