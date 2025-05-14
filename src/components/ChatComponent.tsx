@@ -15,6 +15,8 @@ import KnowledgeLibraryPanel from './KnowledgeLibraryPanel';
 import RenameDialog from '@/components/RenameDialog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { handleDocumentGeneration } from '@/lib/openai-service';
+import PdfDocumentEmbed from '@/components/PdfDocumentEmbed';
 
 // Definicja typów
 interface Message {
@@ -22,6 +24,11 @@ interface Message {
   text: string;
   sender: 'user' | 'bot';
   timestamp: Date;
+}
+
+interface ExtendedMessage extends Message {
+  pdfUrl?: string;
+  documentId?: string;
 }
 
 interface Chat {
@@ -42,7 +49,7 @@ export default function ChatComponent() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [activeDocumentIds, setActiveDocumentIds] = useState<string[]>([]);
   // Stan dla czatu
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ExtendedMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -126,7 +133,10 @@ export default function ChatComponent() {
               id: msg.id,
               text: msg.content,
               sender: msg.role === 'user' ? 'user' : 'bot',
-              timestamp: new Date(msg.createdAt)
+              timestamp: new Date(msg.createdAt),
+              // Dodaj pole pdfUrl i documentId, jeśli istnieją w metadanych
+              pdfUrl: msg.metadata && msg.metadata.hasPdf ? `/api/document/${msg.metadata.documentId}/pdf` : undefined,
+              documentId: msg.metadata && msg.metadata.documentId
             }));
             
             setMessages(formattedMessages);
@@ -461,131 +471,157 @@ export default function ChatComponent() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (inputValue.trim() === '' || isLoading) return;
-    
-    const userInput = inputValue.trim();
-    console.log("🔍 Wysyłanie zapytania:", userInput);
-    
-    // Jeśli nie ma aktywnego czatu, najpierw utwórz nowy
-    if (!currentChatId) {
-      try {
-        const response = await fetch('/api/chats', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: userInput.length > 30 ? `${userInput.substring(0, 27)}...` : userInput
-          }),
-        });
-        
-        if (!response.ok) throw new Error('Problem z utworzeniem czatu');
-        
-        const data = await response.json();
-        setCurrentChatId(data.chat.id);
-        
-        // Dodanie nowego czatu do listy
-        const newChat = {
-          id: data.chat.id,
-          title: data.chat.title,
-          createdAt: data.chat.createdAt,
-          updatedAt: data.chat.updatedAt
-        };
-        
-        setChats(prevChats => [newChat, ...prevChats]);
-      } catch (error) {
-        console.error('Błąd podczas tworzenia czatu:', error);
-        return;
-      }
-    }
-    
-    // Dodaj wiadomość użytkownika lokalnie
-    const userMessage: Message = {
-      id: uuidv4(),
-      text: userInput,
-      sender: 'user',
-      timestamp: new Date()
-    };
-    
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
-    setInputValue('');
-    setIsLoading(true);
-    
-    // Zapisz wiadomość użytkownika w bazie danych
+  e.preventDefault();
+  
+  if (inputValue.trim() === '' || isLoading) return;
+  
+  const userInput = inputValue.trim();
+  console.log("🔍 Wysyłanie zapytania:", userInput);
+  
+  setInputValue('');
+  setIsLoading(true);
+  
+  let chatId = currentChatId;
+  
+  // Jeśli nie ma aktywnego czatu, najpierw utwórz nowy
+  if (!chatId) {
     try {
-      await fetch(`/api/chats/${currentChatId}/messages`, {
+      const response = await fetch('/api/chats', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          content: userInput,
-          role: 'user'
-        }),
-      });
-    } catch (error) {
-      console.error('Błąd podczas zapisywania wiadomości użytkownika:', error);
-    }
-    
-    let response = "";
-    
-    try {
-      console.log("🔍 Próba pobrania odpowiedzi z API OpenAI...");
-      
-      // Użycie funkcji pomocniczej do obsługi odpowiedzi
-      response = await getAIResponseWithFallback(userInput);
-      console.log("🔍 Otrzymano odpowiedź:", response);
-      
-      // Zapisz odpowiedź asystenta w bazie danych
-      await fetch(`/api/chats/${currentChatId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: response,
-          role: 'assistant'
+          title: userInput.length > 30 ? `${userInput.substring(0, 27)}...` : userInput
         }),
       });
       
-      // Zaktualizuj tytuł czatu na podstawie pierwszej wiadomości użytkownika (jeśli to nowy czat)
-      if (messages.length <= 1) {
-        const title = userInput.length > 30 ? `${userInput.substring(0, 27)}...` : userInput;
-        
-        await fetch(`/api/chats/${currentChatId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: title
-          }),
-        });
-        
-        // Aktualizuj tytuł w lokalnej liście czatów
-        setChats(prevChats => prevChats.map(chat => 
-          chat.id === currentChatId ? {...chat, title: title} : chat
-        ));
-      }
+      if (!response.ok) throw new Error('Problem z utworzeniem czatu');
       
-    } catch (error) {
-      console.error('🔍 Błąd podczas przetwarzania wiadomości:', error);
-      response = "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
-    } finally {
-      // Dodaj odpowiedź bota
-      const botMessage: Message = {
-        id: uuidv4(),
-        text: response,
-        sender: 'bot',
-        timestamp: new Date()
+      const data = await response.json();
+      chatId = data.chat.id;
+      setCurrentChatId(chatId);
+      
+      // Dodanie nowego czatu do listy
+      const newChat = {
+        id: data.chat.id,
+        title: data.chat.title,
+        createdAt: data.chat.createdAt,
+        updatedAt: data.chat.updatedAt
       };
       
-      setMessages((prevMessages) => [...prevMessages, botMessage]);
+      setChats(prevChats => [newChat, ...prevChats]);
+    } catch (error) {
+      console.error('Błąd podczas tworzenia czatu:', error);
       setIsLoading(false);
+      return;
     }
+  }
+  
+  // Dodaj wiadomość użytkownika lokalnie
+  const userMessage: ExtendedMessage = {
+    id: uuidv4(),
+    text: userInput,
+    sender: 'user',
+    timestamp: new Date()
   };
+  
+  setMessages((prevMessages) => [...prevMessages, userMessage]);
+  
+  // Zapisz wiadomość użytkownika w bazie danych
+  try {
+    await fetch(`/api/chats/${chatId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: userInput,
+        role: 'user'
+      }),
+    });
+  } catch (error) {
+    console.error('Błąd podczas zapisywania wiadomości użytkownika:', error);
+  }
+  
+  let response = "";
+  let pdfUrl = undefined;
+  let documentId = undefined;
+  
+  try {
+    console.log("🔍 Sprawdzanie, czy zapytanie dotyczy generowania dokumentu...");
+    
+    // Sprawdź, czy zapytanie dotyczy generowania dokumentu
+    // Upewnij się, że chatId nie jest null - używamy wartości z wcześniejszego kroku
+    const documentResult = await handleDocumentGeneration(userInput, chatId as string);
+    
+    if (documentResult.text) {
+      // Zapytanie dotyczyło generowania dokumentu
+      response = documentResult.text;
+      pdfUrl = documentResult.pdfUrl;
+      documentId = documentResult.documentId;
+    } else {
+      // Standardowe zapytanie - użyj zwykłej funkcji odpowiedzi
+      console.log("🔍 Standardowe zapytanie. Próba pobrania odpowiedzi z API OpenAI...");
+      response = await getAIResponseWithFallback(userInput);
+    }
+    
+    console.log("🔍 Otrzymano odpowiedź:", response);
+    
+    // Zapisz odpowiedź asystenta w bazie danych (wraz z metadanymi PDF, jeśli istnieją)
+    await fetch(`/api/chats/${chatId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: response,
+        role: 'assistant',
+        metadata: pdfUrl ? {
+          hasPdf: true,
+          documentId: documentId
+        } : undefined
+      }),
+    });
+    
+    // Zaktualizuj tytuł czatu na podstawie pierwszej wiadomości użytkownika (jeśli to nowy czat)
+    if (messages.length <= 1) {
+      const title = userInput.length > 30 ? `${userInput.substring(0, 27)}...` : userInput;
+      
+      await fetch(`/api/chats/${chatId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: title
+        }),
+      });
+      
+      // Aktualizuj tytuł w lokalnej liście czatów
+      setChats(prevChats => prevChats.map(chat => 
+        chat.id === chatId ? {...chat, title: title} : chat
+      ));
+    }
+    
+  } catch (error) {
+    console.error('🔍 Błąd podczas przetwarzania wiadomości:', error);
+    response = "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
+  } finally {
+    // Dodaj odpowiedź bota
+    const botMessage: ExtendedMessage = {
+      id: uuidv4(),
+      text: response,
+      sender: 'bot',
+      timestamp: new Date(),
+      pdfUrl: pdfUrl,
+      documentId: documentId
+    };
+    
+    setMessages((prevMessages) => [...prevMessages, botMessage]);
+    setIsLoading(false);
+  }
+};
 
   // Funkcja pomocnicza do obsługi odpowiedzi z OpenAI
   const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
@@ -1333,6 +1369,18 @@ export default function ChatComponent() {
                     {message.text}
                   </div>
                 )}
+                
+                {/* Dodaj ten kod dokładnie tutaj, po wyświetleniu tekstu wiadomości */}
+                {message.sender === 'bot' && message.pdfUrl && (
+                  <div className="mt-2 w-full">
+                    <PdfDocumentEmbed 
+                      pdfUrl={message.pdfUrl} 
+                      title={`Wygenerowany dokument`} 
+                      height={400}
+                    />
+                  </div>
+                )}
+                
                 <div style={{
                   fontSize: '12px',
                   color: message.sender === 'user' ? 'rgba(255, 255, 255, 0.8)' : '#9ca3af',

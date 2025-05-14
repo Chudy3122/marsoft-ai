@@ -543,3 +543,165 @@ ${excelText.substring(0, 3000)}...
     return "Przepraszam, wystąpił błąd podczas analizy arkusza Excel. Spróbuj ponownie później.";
   }
 }
+
+/**
+ * Funkcja do generowania PDF przez asystenta AI i zwracania linku
+ * @param prompt Zapytanie użytkownika o wygenerowanie dokumentu
+ * @param chatId ID czatu
+ * @param documentTitle Tytuł dokumentu
+ * @returns Odpowiedź od API z linkiem do wygenerowanego PDF
+ */
+export async function generatePdfDocument(
+  prompt: string,
+  chatId: string,
+  documentTitle?: string
+): Promise<{ message: string; pdfUrl: string; documentId?: string }> {
+  try {
+    // Najpierw wygeneruj treść dokumentu za pomocą OpenAI
+    const pdfContent = await getOpenAIResponseWithWebSearch(
+      `Wygeneruj dokument w formacie markdown na podstawie zapytania: "${prompt}". 
+      Użyj formatowania markdown z nagłówkami (## i ###), pogrubieniami (**tekst**), 
+      listami punktowanymi (- punkt) lub numerowanymi (1. punkt).`,
+      [],
+      true
+    );
+    
+    // Tytuł dokumentu (z zapytania lub domyślny)
+    const title = documentTitle || `Dokument: ${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}`;
+    
+    // Teraz wyślij zapytanie do endpointu generowania PDF
+    const response = await fetch('/api/generate-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title,
+        content: pdfContent,
+        chatId,
+        addToChat: true
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Problem z generowaniem PDF. Status: ${response.status}`);
+    }
+    
+    // Pobierz link do pliku PDF i ID dokumentu z nagłówków odpowiedzi
+    const documentId = response.headers.get('Document-Id') || undefined;
+    
+    // Utwórz blob URL dla odpowiedzi
+    const blob = await response.blob();
+    const pdfUrl = URL.createObjectURL(blob);
+    
+    return {
+      message: `Wygenerowałem dokument "${title}". Możesz go pobrać lub przeglądać bezpośrednio w konwersacji.`,
+      pdfUrl,
+      documentId
+    };
+    
+  } catch (error) {
+    console.error('Błąd podczas generowania dokumentu PDF:', error);
+    return {
+      message: "Przepraszam, wystąpił problem podczas generowania dokumentu PDF. Spróbuj ponownie później.",
+      pdfUrl: ""
+    };
+  }
+}
+
+/**
+ * Funkcja do obsługi żądań użytkownika związanych z generowaniem dokumentów
+ * @param prompt Zapytanie użytkownika 
+ * @param chatId ID czatu
+ * @returns Odpowiedź dla użytkownika
+ */
+export async function handleDocumentGeneration(
+  prompt: string,
+  chatId: string
+): Promise<{ text: string; pdfUrl?: string; documentId?: string }> {
+  // Rozbudowany zestaw wzorców do wykrywania żądań generowania dokumentów
+  const generateDocumentPatterns = [
+    // Wzorce bezpośrednio związane z dokumentami
+    /wygeneruj (?:dla mnie )?(?:dokument|pdf|plik pdf|raport)/i,
+    /(?:stwórz|utwórz|przygotuj|zrób)(?:\s+dla\s+mnie)?\s+(?:dokument|pdf|plik pdf|raport)/i,
+    /(?:zrób|wygeneruj|stwórz) (?:dla mnie )?(?:pdf|plik pdf|dokument pdf)/i,
+    /(?:zapisz|wyeksportuj)(?:\s+to)?\s+(?:jako|do|w)?\s+(?:pdf|dokument|pliku)/i,
+    /(?:zrób|utwórz)(?:\s+z\s+tego)?\s+(?:dokument|pdf|plik)/i,
+    /(?:sporządź|generuj|wykonaj)(?:\s+dla\s+mnie)?\s+(?:dokument|raport|pdf)/i,
+    
+    // Wzorce z listy, tabelą itp.
+    /(?:stwórz|przygotuj|wygeneruj)(?:\s+dla\s+mnie)?\s+(?:listę|zestawienie|tabelę|wykaz)/i,
+    /(?:zrób|utwórz|stwórz)(?:\s+dla\s+mnie)?\s+(?:listę|zestawienie|tabelę|wykaz|podsumowanie)/i,
+    
+    // Wzorce z dokumentami specyficznymi
+    /(?:przygotuj|wygeneruj|stwórz)(?:\s+dla\s+mnie)?\s+(?:ofertę|umowę|sprawozdanie|analizę)/i,
+    /(?:napisz|przygotuj)(?:\s+dla\s+mnie)?\s+(?:protokół|zarys|kosztorys|specyfikację)/i,
+    
+    // Wzorce z frazami formalnymi
+    /(?:uprzejmie\s+proszę\s+o\s+przygotowanie|czy\s+mógłbyś\s+przygotować)(?:\s+dla\s+mnie)?\s+(?:dokumentu|raportu|pliku|pdf)/i,
+    /(?:potrzebuję|chciałbym)(?:\s+otrzymać)?\s+(?:dokument|raport|plik pdf|zestawienie)/i
+  ];
+  
+  // Sprawdź, czy zapytanie pasuje do któregokolwiek z wzorców
+  let isDocumentRequest = generateDocumentPatterns.some(pattern => pattern.test(prompt));
+  
+  // Dodatkowe sprawdzanie kontekstowe dla prostszych fraz
+  // Jeśli fraza jest prosta, ale zawiera słowo kluczowe i kontekst dokumentu
+  if (!isDocumentRequest) {
+    const simplePatterns = [
+      /(?:lista|zestawienie|tabela|wykaz|spis)/i,
+      /(?:raport|pdf|dokument)/i,
+      /(?:podsumowanie|analiza)/i
+    ];
+    
+    const documentContextPatterns = [
+      /(?:osób|ludzi|personelu|pracowników|uczestników)/i,
+      /(?:projekt|ue|unii|europejski|regionalny)/i,
+      /(?:zadań|kosztów|wydatków|harmonogram)/i
+    ];
+    
+    const hasSimplePattern = simplePatterns.some(pattern => pattern.test(prompt));
+    const hasContextPattern = documentContextPatterns.some(pattern => pattern.test(prompt));
+    
+    // Jeśli zapytanie zawiera zarówno prostą frazę jak i kontekst dokumentu, uznaj za żądanie dokumentu
+    if (hasSimplePattern && hasContextPattern) {
+      console.log("Wykryto kontekstowe żądanie dokumentu:", prompt);
+      isDocumentRequest = true;
+    }
+  }
+  
+  if (!isDocumentRequest) {
+    // Jeśli nie jest to żądanie dokumentu, zwróć pusty tekst - normalna odpowiedź AI
+    return { text: "" };
+  }
+  
+  console.log("Wykryto żądanie generowania dokumentu:", prompt);
+  
+  // Ekstrahuj tytuł dokumentu, jeśli został podany
+  const titleMatch = prompt.match(/z tytułem [\"\'](.*?)[\"\']/i) || 
+                    prompt.match(/tytułem [\"\'](.*?)[\"\']/i) ||
+                    prompt.match(/zatytułowany [\"\'](.*?)[\"\']/i) ||
+                    prompt.match(/nazwa [\"\'](.*?)[\"\']/i) ||
+                    prompt.match(/pt\. [\"\'](.*?)[\"\']/i);
+  
+  const documentTitle = titleMatch ? titleMatch[1] : undefined;
+  
+  // Ekstrahuj treść zapytania bez instrukcji generowania PDF
+  // Rozbudowane wzorce do usuwania instrukcji generowania
+  const contentPrompt = prompt
+    .replace(/(?:wygeneruj|stwórz|przygotuj|utwórz|zrób|sporządź|generuj|wykonaj)(?:\s+dla\s+mnie)?(?:\s+(?:dokument|pdf|plik|raport|listę|zestawienie|tabelę|wykaz|podsumowanie|ofertę|umowę|sprawozdanie|analizę|protokół|zarys|kosztorys|specyfikację))/gi, '')
+    .replace(/(?:zapisz|wyeksportuj)(?:\s+to)?(?:\s+(?:jako|do|w))?(?:\s+(?:pdf|dokument|plik))/gi, '')
+    .replace(/(?:uprzejmie\s+proszę\s+o\s+przygotowanie|czy\s+mógłbyś\s+przygotować)(?:\s+dla\s+mnie)?(?:\s+(?:dokumentu|raportu|pliku|pdf))/gi, '')
+    .replace(/(?:potrzebuję|chciałbym)(?:\s+otrzymać)?(?:\s+(?:dokument|raport|plik|zestawienie))/gi, '')
+    .replace(/z tytułem [\"\'](.*?)[\"\']|tytułem [\"\'](.*?)[\"\']|zatytułowany [\"\'](.*?)[\"\']|nazwa [\"\'](.*?)[\"\']|pt\. [\"\'](.*?)[\"\']/gi, '')
+    .trim();
+  
+  // Wygeneruj dokument
+  const result = await generatePdfDocument(contentPrompt, chatId, documentTitle);
+  
+  return {
+    text: result.message,
+    pdfUrl: result.pdfUrl,
+    documentId: result.documentId
+  };
+}
