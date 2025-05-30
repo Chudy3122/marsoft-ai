@@ -52,7 +52,9 @@ function shouldSearchWeb(query: string): boolean {
     /termin/i, /konkurs/i, /nabór/i, /ogłoszenie/i,
     /program/i, /UE/i, /unijny/i, /europejski/i,
     /rozporządzenie/i, /ustawa/i, /dokument/i, /przepis/i,
-    /2023/i, /2024/i, /2025/i // Aktualne i przyszłe lata
+    /2023/i, /2024/i, /2025/i, // Aktualne i przyszłe lata
+    /pogoda/i, /kurs walut/i, /giełda/i, /ceny/i, /notowania/i,
+    /news/i, /wiadomości/i, /wydarzenia/i
   ];
   
   // Sprawdź, czy zapytanie zawiera URL
@@ -200,7 +202,19 @@ export async function getOpenAIResponseWithManualSearch(
 
     const userPromptWithContext = `${documentsContext}\n${manualSearchContent}\n\nPytanie użytkownika: ${prompt}\n\nOdpowiedz na podstawie dostarczonych informacji.`;
 
-    const systemPrompt = `Jesteś asystentem MarsoftAI, pomocnym i wszechstronnym asystentem. Twoją specjalizacją są projekty UE, dokumentacja projektowa i fundusze europejskie, ale możesz też odpowiadać na inne pytania związane z pracą i ogólnie przydatną wiedzą. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+    // ZMIENIONY SYSTEM PROMPT - Bardziej uniwersalny
+    const systemPrompt = `Jesteś pomocnym i wszechstronnym asystentem AI. Potrafisz odpowiadać na szeroki zakres pytań i pomagać w różnorodnych zadaniach. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+
+Możesz pomagać w:
+- Projektach UE i dokumentacji projektowej (to jest Twoja specjalizacja)
+- Odpowiadaniu na pytania ogólne
+- Analizie dokumentów i danych
+- Rozwiązywaniu problemów
+- Edukacji i wyjaśnianiu pojęć
+- Tworzeniu treści
+- Planowaniu i organizacji
+- Wsparciu technicznym
+- I wielu innych obszarach
 
 ${enableWebSearch ? 'Masz możliwość wyszukiwania informacji w internecie, aby zapewnić aktualne i dokładne odpowiedzi.' : 'Opieraj się na swoich wewnętrznych informacjach i udostępnionych dokumentach.'}
 
@@ -216,12 +230,12 @@ ${enableWebSearch ? '7. Jeśli podajesz informacje znalezione w internecie, zaws
 Jeśli użytkownik załączył jakieś dokumenty, to ważne, abyś bazował na ich treści w swojej odpowiedzi. Dokumenty są bardzo ważnym kontekstem dla Twoich odpowiedzi.
 
 ZASADY ODPOWIADANIA:
-- NIE odpowiadaj na pytania obraźliwe, niemoralne, nielegalne lub wyraźnie szkodliwe.
-- NIE odpowiadaj na żądania tworzenia treści dla dorosłych, propagandy lub dezinformacji.
-- NIE odpowiadaj na absolutne bzdury i treści pozbawione jakiegokolwiek sensu.
-- Odpowiadaj na pytania związane z tematami zawodowymi, edukacyjnymi i ogólnie przydatnymi.
-- Możesz odpowiadać na pytania o tematy niezwiązane bezpośrednio z projektami UE, jeśli są związane z pracą lub wiedzą ogólną.
-- Staraj się być pomocny i udzielać rzetelnych informacji w rozsądnych granicach.`;
+- Odpowiadaj na wszystkie rozsądne pytania w ramach swoich możliwości
+- Bądź pomocny, dokładny i rzetelny
+- Jeśli nie znasz odpowiedzi, powiedz o tym szczerze
+- Dostosuj ton i poziom szczegółowości do pytania
+- Zachowuj profesjonalizm przy jednoczesnej życzliwości
+- Jeśli pytanie dotyczy szkodliwych, nielegalnych lub nieetycznych działań, grzecznie odmów i zaproponuj konstruktywne alternatywy`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-2024-04-16",
@@ -296,7 +310,6 @@ export async function fetchWebContent(url: string): Promise<any> {
   }
 }
 
-
 /**
  * Funkcja do pobierania odpowiedzi od OpenAI z możliwością wyszukiwania w sieci
  * @param prompt Zapytanie do API
@@ -317,7 +330,21 @@ export async function getOpenAIResponseWithWebSearch(
       console.log("Długość kontekstu dokumentów:", documentsContext.length);
     }
 
-    const systemPrompt = `Jesteś asystentem MarsoftAI, specjalistą od projektów UE. Pomagasz w tworzeniu dokumentacji projektowej, odpowiadasz na pytania związane z funduszami europejskimi, i doradzasz w kwestiach pisania wniosków, raportów, harmonogramów i budżetów. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+    // ZMIENIONY SYSTEM PROMPT - Bardziej uniwersalny
+    const systemPrompt = `Jesteś pomocnym i wszechstronnym asystentem AI. Potrafisz odpowiadać na szeroki zakres pytań i pomagać w różnorodnych zadaniach. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
+
+Możesz pomagać w:
+- Projektach UE i dokumentacji projektowej (to jest Twoja specjalizacja, ale nie jedyna dziedzina)
+- Odpowiadaniu na pytania ogólne z różnych dziedzin
+- Analizie dokumentów i danych
+- Programowaniu i technologii
+- Naukach ścisłych i humanistycznych
+- Biznesie i zarządzaniu
+- Edukacji i nauce
+- Kreatywnym pisaniu
+- Rozwiązywaniu problemów życiowych
+- Planowaniu i organizacji
+- I wielu innych obszarach
 
 ${enableWebSearch ? 'Masz możliwość wyszukiwania informacji w internecie, aby zapewnić aktualne i dokładne odpowiedzi.' : 'Nie masz dostępu do internetu, więc opieraj się tylko na swoich wewnętrznych informacjach i udostępnionych dokumentach.'}
 
@@ -332,7 +359,13 @@ ${enableWebSearch ? '7. Jeśli podajesz informacje znalezione w internecie, zaws
 
 Jeśli użytkownik załączył jakieś dokumenty, to ważne, abyś bazował na ich treści w swojej odpowiedzi. Dokumenty są bardzo ważnym kontekstem dla Twoich odpowiedzi.
 
-BARDZO WAŻNE: Odpowiadaj TYLKO na pytania związane z pracą, projektami UE, dokumentacją projektową, funduszami europejskimi i podobnymi tematami zawodowymi.`;
+ZASADY ODPOWIADANIA:
+- Odpowiadaj na wszystkie rozsądne pytania, nie ograniczaj się tylko do tematów zawodowych
+- Bądź pomocny, dokładny i rzetelny w każdej dziedzinie
+- Dostosuj poziom szczegółowości i ton do charakteru pytania
+- Jeśli nie znasz odpowiedzi, powiedz o tym szczerze i zaproponuj, gdzie można szukać informacji
+- Zachowuj profesjonalizm przy jednoczesnej życzliwości
+- Jeśli pytanie dotyczy szkodliwych, nielegalnych lub nieetycznych działań, grzecznie odmów i zaproponuj konstruktywne alternatywy`;
     
     // Dodaj kontekst dokumentów do promptu użytkownika
     const userPromptWithContext = documentIds.length > 0 
@@ -705,3 +738,5 @@ export async function handleDocumentGeneration(
     documentId: result.documentId
   };
 }
+
+export { openai };

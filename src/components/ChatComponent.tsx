@@ -65,6 +65,9 @@ export default function ChatComponent() {
   const [showRenameInput, setShowRenameInput] = useState(false);
   const [newChatName, setNewChatName] = useState("");
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [detectionResults, setDetectionResults] = useState<any>(null);
+  const [showDetectionModal, setShowDetectionModal] = useState(false);
 
   // Pobieranie historii czatów
   useEffect(() => {
@@ -1101,9 +1104,10 @@ export default function ChatComponent() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px',
+          padding: '12px 16px',
           borderBottom: '1px solid #e5e7eb',
-          backgroundColor: 'white'
+          backgroundColor: 'white',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
         }}>
           <div style={{ 
             display: 'flex', 
@@ -1114,24 +1118,28 @@ export default function ChatComponent() {
               onClick={() => setShowSidebar(!showSidebar)}
               style={{
                 marginRight: '12px',
-                padding: '5px',
+                padding: '8px',
                 backgroundColor: 'transparent',
                 border: 'none',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                transition: 'background-color 0.2s'
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               title={showSidebar ? "Ukryj historię" : "Pokaż historię"}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="12" x2="21" y2="12"></line>
                 <line x1="3" y1="6" x2="21" y2="6"></line>
                 <line x1="3" y1="18" x2="21" y2="18"></line>
               </svg>
             </button>
             
-            <div style={{ position: 'relative', width: '40px', height: '40px', marginRight: '12px' }}>
+            <div style={{ position: 'relative', width: '34px', height: '34px', marginRight: '10px' }}>
               <Image 
                 src="/MarsoftAI.png" 
                 alt="MarsoftAI Logo" 
@@ -1140,17 +1148,16 @@ export default function ChatComponent() {
                 priority
               />
             </div>
-            <h1 style={{ fontSize: '24px', fontWeight: 600, color: '#333d3d' }}>MarsoftAI</h1>
-            
+            <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#333d3d', margin: 0 }}>MarsoftAI</h1>
           </div>
           
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
-            gap: '16px'
+            gap: '8px'
           }}>
-
-          {/* Przycisk włączania/wyłączania wyszukiwania */}
+            {/* Styl dla wszystkich przycisków - wspólne właściwości */}
+            {/* Przycisk włączania/wyłączania wyszukiwania */}
             <button
               onClick={toggleWebSearch}
               title={webSearchEnabled ? "Wyłącz wyszukiwanie w internecie" : "Włącz wyszukiwanie w internecie"}
@@ -1158,119 +1165,377 @@ export default function ChatComponent() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '8px 12px', // Zwiększone padding dla miejsca na tekst
-                borderRadius: '8px',
-                backgroundColor: webSearchEnabled ? 'rgba(163, 205, 57, 0.1)' : 'transparent',
-                border: webSearchEnabled ? '1px solid rgba(163, 205, 57, 0.3)' : '1px solid #e5e7eb',
+                padding: '0 12px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: webSearchEnabled ? 'rgba(163, 205, 57, 0.12)' : 'white',
+                border: webSearchEnabled ? '1px solid rgba(163, 205, 57, 0.5)' : '1px solid #d1d5db',
                 cursor: 'pointer',
-                gap: '6px' // Dodane odstępy między ikoną a tekstem
+                gap: '6px',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = webSearchEnabled ? 'rgba(163, 205, 57, 0.7)' : '#a3cd39';
+                e.currentTarget.style.backgroundColor = webSearchEnabled ? 'rgba(163, 205, 57, 0.15)' : '#f9fafb';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = webSearchEnabled ? 'rgba(163, 205, 57, 0.5)' : '#d1d5db';
+                e.currentTarget.style.backgroundColor = webSearchEnabled ? 'rgba(163, 205, 57, 0.12)' : 'white';
               }}
             >
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
-                width="18" 
-                height="18" 
+                width="16" 
+                height="16" 
                 viewBox="0 0 24 24" 
                 fill="none" 
-                stroke={webSearchEnabled ? '#a3cd39' : 'currentColor'} 
+                stroke={webSearchEnabled ? '#a3cd39' : '#64748b'} 
                 strokeWidth="2" 
                 strokeLinecap="round" 
                 strokeLinejoin="round"
               >
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                {!webSearchEnabled && <line x1="4" y1="18" x2="18" y2="4" stroke="red" strokeWidth="2"></line>}
+                {!webSearchEnabled && <line x1="4" y1="18" x2="18" y2="4" stroke="#ef4444" strokeWidth="2"></line>}
               </svg>
               <span style={{ 
-                fontSize: '13px', 
-                fontWeight: '500',
-                color: webSearchEnabled ? '#4b5563' : '#4b5563'
+                fontSize: '14px', 
+                fontWeight: '400',
+                color: webSearchEnabled ? '#3f5128' : '#4b5563',
+                whiteSpace: 'nowrap'
               }}>
-                {webSearchEnabled ? 'Wyłącz wyszukiwanie' : 'Włącz wyszukiwanie'}
+                {webSearchEnabled ? 'Włącz wyszukiwanie' : 'Włącz wyszukiwanie'}
               </span>
             </button>
-             {/* Przycisk biblioteki wiedzy */}
-            <KnowledgeLibraryButton
-              currentChatId={currentChatId}
-              activeDocumentIds={activeDocumentIds}
-              onDocumentsSelected={handleDocumentsSelected}
-            />
-            {/* Przycisk wgrywania PDF */}
-            <PdfUploadButton onPdfContent={handlePdfContent} />
 
-            {/* Przycisk wgrywania Excel */}
-            <ExcelUploadButton onExcelContent={handleExcelContent} />
-            
-            {/* Informacja o zalogowanym użytkowniku */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  gap: '8px',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}
+            {/* Biblioteka Wiedzy - zastosuj ten sam styl czcionki */}
+            <button
+              onClick={() => {/* Pokaż bibliotekę wiedzy */}}
+              title="Biblioteka Wiedzy"
+              style={{
+                display: 'flex',
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '0 12px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+                border: '1px solid #d1d5db',
+                cursor: 'pointer',
+                gap: '6px',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f9fafb';
+                e.currentTarget.style.borderColor = '#a3cd39';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.borderColor = '#d1d5db';
+              }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="#64748b" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
               >
-                <div style={{ 
-                  width: '32px', 
-                  height: '32px', 
-                  borderRadius: '50%', 
-                  backgroundColor: '#a3cd39', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: 500,
-                  fontSize: '14px'
-                }}>
-                  {session?.user?.name 
-                    ? session.user.name.charAt(0).toUpperCase() 
-                    : (session?.user?.email?.charAt(0).toUpperCase() || 'U')}
-                </div>
-                <span style={{ color: '#4b5563', fontWeight: 500 }}>
-                  {session?.user?.name || session?.user?.email || 'Użytkownik'}
-                </span>
-              </button>
-              
-              {showUserMenu && (
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+              <span style={{ 
+                fontSize: '14px', 
+                fontWeight: '400',
+                color: '#4b5563',
+                whiteSpace: 'nowrap'
+              }}>
+                Biblioteka Wiedzy
+              </span>
+            </button>
+
+            {/* Wgraj PDF - przycisk akcji z jasno zielonym tłem */}
+            <button
+              onClick={() => {/* Aktywuj wgrywanie PDF */}}
+              title="Wgraj PDF"
+              style={{
+                display: 'flex',
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '0 12px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: '#a3cd39',
+                border: '1px solid #93b935',
+                cursor: 'pointer',
+                gap: '6px',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.08)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#97c030';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#a3cd39';
+              }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="white" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <line x1="9" y1="15" x2="15" y2="15"></line>
+              </svg>
+              <span style={{ 
+                fontSize: '14px', 
+                fontWeight: '400',
+                color: 'white',
+                whiteSpace: 'nowrap'
+              }}>
+                Wgraj PDF
+              </span>
+            </button>
+
+            {/* Wgraj XLS - przycisk taki sam jak Biblioteka Wiedzy */}
+            <button
+              onClick={() => {/* Aktywuj wgrywanie XLS */}}
+              title="Wgraj XLS"
+              style={{
+                display: 'flex',
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '0 12px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+                border: '1px solid #d1d5db',
+                cursor: 'pointer',
+                gap: '6px',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f9fafb';
+                e.currentTarget.style.borderColor = '#a3cd39';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.borderColor = '#d1d5db';
+              }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="#64748b" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              <span style={{ 
+                fontSize: '14px', 
+                fontWeight: '400',
+                color: '#4b5563',
+                whiteSpace: 'nowrap'
+              }}>
+                Wgraj XLS
+              </span>
+            </button>
+            {/* Harmonogramy - przycisk taki sam jak pozostałe */}
+            {/* 
+            <button
+              onClick={() => router.push('/projects')}
+              title="Harmonogramy projektów"
+              style={{
+                display: 'flex',
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '0 12px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+                border: '1px solid #d1d5db',
+                cursor: 'pointer',
+                gap: '6px',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f9fafb';
+                e.currentTarget.style.borderColor = '#a3cd39';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.borderColor = '#d1d5db';
+              }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="#64748b" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span style={{ 
+                fontSize: '14px', 
+                fontWeight: '400',
+                color: '#4b5563',
+                whiteSpace: 'nowrap'
+              }}>
+                Harmonogramy
+              </span>
+            </button>
+            */}           
+            {/* Przycisk Admin */}
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)} 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: 'transparent',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                height: '36px',
+                padding: '0 6px',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <div style={{ 
+                width: '28px', 
+                height: '28px', 
+                borderRadius: '50%', 
+                backgroundColor: '#a3cd39', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '14px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+              }}>
+                A
+              </div>
+              <span style={{ 
+                color: '#4b5563', 
+                fontWeight: 400,
+                fontSize: '14px'
+              }}>
+                Admin
+              </span>
+            </button>
+            
+            {showUserMenu && (
+              <>
+                <div 
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 9
+                  }}
+                  onClick={() => setShowUserMenu(false)}
+                />
                 <div style={{
                   position: 'absolute',
-                  top: '45px',
+                  top: '42px',
                   right: '0',
                   backgroundColor: 'white',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                  borderRadius: '6px',
-                  width: '160px',
-                  zIndex: 10
+                  borderRadius: '8px',
+                  width: '180px',
+                  zIndex: 10,
+                  border: '1px solid #e5e7eb',
+                  overflow: 'hidden'
                 }}>
+                  <div style={{
+                    padding: '12px 16px',
+                    borderBottom: '1px solid #e5e7eb',
+                    fontSize: '14px'
+                  }}>
+                    <div style={{ fontWeight: 500, color: '#111827' }}>
+                      {session?.user?.name || 'Użytkownik'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                      {session?.user?.email || 'email@example.com'}
+                    </div>
+                  </div>
                   <button
                     onClick={() => signOut({ callbackUrl: '/login' })}
                     style={{
-                      display: 'block',
+                      display: 'flex',
+                      alignItems: 'center',
                       width: '100%',
                       textAlign: 'left',
                       padding: '10px 16px',
                       fontSize: '14px',
-                      color: '#4b5563',
+                      color: '#ef4444',
                       backgroundColor: 'transparent',
                       border: 'none',
-                      borderRadius: '6px',
                       cursor: 'pointer',
-                      transition: 'background-color 0.2s'
+                      transition: 'background-color 0.2s',
+                      gap: '8px'
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="#ef4444" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                      <polyline points="16 17 21 12 16 7"></polyline>
+                      <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
                     Wyloguj się
                   </button>
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </header>
         
@@ -1599,6 +1864,127 @@ export default function ChatComponent() {
           onRename={handleRenameChat}
         />
       )}
-    </div>
-  );
-}
+      {showDetectionModal && detectionResults && (
+        <>
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 1000,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
+            onClick={() => setShowDetectionModal(false)}
+          />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            width: '500px',
+            maxWidth: '90vw',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            zIndex: 1001,
+            padding: '20px'
+          }}>
+            <h2 style={{ marginTop: 0 }}>Wykryte terminy</h2>
+            
+            <p>
+              Znaleziono <strong>{detectionResults.totalDetected}</strong> potencjalnych terminów, 
+              z czego <strong>{detectionResults.totalCreated}</strong> zostało dodanych do projektu.
+            </p>
+            
+            <div style={{ marginTop: '16px' }}>
+              <h3>Projekt</h3>
+              <p>
+                <strong>{detectionResults.project?.name}</strong><br />
+                {new Date(detectionResults.project?.startDate).toLocaleDateString('pl-PL')} - {new Date(detectionResults.project?.endDate).toLocaleDateString('pl-PL')}
+              </p>
+            </div>
+            
+            {detectionResults.createdItems && detectionResults.createdItems.length > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <h3>Dodane pozycje</h3>
+                
+                <div style={{ maxHeight: '300px', overflow: 'auto', marginTop: '8px' }}>
+                  {detectionResults.createdItems.map((item: any) => (
+                    <div 
+                      key={item.id} 
+                      style={{ 
+                        padding: '8px',
+                        borderLeft: `4px solid ${item.type === 'task' ? '#a3cd39' : '#ff9800'}`,
+                        backgroundColor: '#f9f9f9',
+                        marginBottom: '8px'
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold' }}>
+                        {item.type === 'task' ? 'Zadanie: ' : 'Kamień milowy: '}
+                        {item.name || item.title}
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#4b5563', marginTop: '4px' }}>
+                        {item.type === 'task' 
+                          ? `${new Date(item.startDate).toLocaleDateString('pl-PL')} - ${new Date(item.endDate).toLocaleDateString('pl-PL')}`
+                          : `Termin: ${new Date(item.date).toLocaleDateString('pl-PL')}`
+                        }
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div style={{ 
+              marginTop: '20px', 
+              display: 'flex', 
+              justifyContent: 'space-between',
+              borderTop: '1px solid #e5e7eb',
+              paddingTop: '16px'
+            }}>
+              <button
+                onClick={() => setShowDetectionModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                Zamknij
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowDetectionModal(false);
+                  router.push(`/projects/${detectionResults.project?.id}`);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#a3cd39',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Przejdź do projektu
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+          </div>
+        );
+      }
