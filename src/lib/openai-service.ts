@@ -43,28 +43,81 @@ const fetchUrlFunctionDefinition = {
  * Funkcja do sprawdzania, czy zapytanie może wymagać wyszukiwania w sieci
  */
 function shouldSearchWeb(query: string): boolean {
+  console.log(`🔍 Sprawdzanie czy zapytanie wymaga wyszukiwania: "${query}"`);
+  
   // Wzorce dla zapytań, które mogą wymagać aktualnych informacji
   const searchPatterns = [
-    /aktualne/i, /najnowsze/i, /ostatnie/i, /bieżące/i, /teraz/i, /dziś/i, /wczoraj/i,
-    /wyszukaj/i, /znajdź/i, /szukaj/i, /google/i, /poszukaj/i,
-    /sprawdź/i, /zobacz/i, /informacje o/i, /dowiedz się/i,
-    /strona/i, /witryna/i, /WWW/i, /http/i, /link/i, /URL/i,
-    /termin/i, /konkurs/i, /nabór/i, /ogłoszenie/i,
-    /program/i, /UE/i, /unijny/i, /europejski/i,
-    /rozporządzenie/i, /ustawa/i, /dokument/i, /przepis/i,
-    /2023/i, /2024/i, /2025/i, // Aktualne i przyszłe lata
-    /pogoda/i, /kurs walut/i, /giełda/i, /ceny/i, /notowania/i,
-    /news/i, /wiadomości/i, /wydarzenia/i
+    // Wskaźniki czasowe
+    /\b(aktualne|najnowsze|ostatnie|bieżące|teraz|dziś|wczoraj|2024|2025)\b/i,
+    
+    // Akcje wyszukiwania
+    /\b(wyszukaj|znajdź|szukaj|poszukaj|sprawdź|zobacz|dowiedz się)\b/i,
+    
+    // Informacje internetowe
+    /\b(strona|witryna|www|http|link|url)\b/i,
+    
+    // Terminy i nabory
+    /\b(termin|konkurs|nabór|ogłoszenie|rekrutacja)\b/i,
+    
+    // Programy UE i finansowanie
+    /\b(program|ue|unijny|europejski|horyzont|erasmus|interreg)\b/i,
+    
+    // Przepisy i dokumenty
+    /\b(rozporządzenie|ustawa|dokument|przepis|regulacja)\b/i,
+    
+    // Dane finansowe i gospodarcze
+    /\b(ceny|kurs|giełda|notowania|inflacja|pkb)\b/i,
+    
+    // Wydarzenia i aktualności
+    /\b(news|wiadomości|wydarzenia|konferencja|spotkanie)\b/i,
+    
+    // Dane kontaktowe i organizacyjne
+    /\b(kontakt|adres|telefon|email|siedziba)\b/i
   ];
   
   // Sprawdź, czy zapytanie zawiera URL
-  const urlPattern = /https?:\/\/[^\s]+/;
+  const urlPattern = /https?:\/\/[^\s]+/i;
   const hasUrl = urlPattern.test(query);
   
-  // Sprawdź, czy zapytanie pasuje do wzorców wyszukiwania
-  const matchesSearchPattern = searchPatterns.some(pattern => pattern.test(query));
+  if (hasUrl) {
+    console.log("✅ Znaleziono URL w zapytaniu - wymaga wyszukiwania");
+    return true;
+  }
   
-  return hasUrl || matchesSearchPattern;
+  // Sprawdź, czy zapytanie pasuje do wzorców wyszukiwania
+  const matchesPattern = searchPatterns.some(pattern => {
+    const matches = pattern.test(query);
+    if (matches) {
+      console.log(`✅ Zapytanie pasuje do wzorca: ${pattern.source}`);
+    }
+    return matches;
+  });
+  
+  // Dodatkowe sprawdzenie dla konkretnych fraz
+  const specificPhrases = [
+    'ile kosztuje',
+    'jaka jest cena',
+    'gdzie mogę',
+    'jak się dostać',
+    'kiedy jest',
+    'czy jest dostępne',
+    'aktualny status',
+    'najnowsze informacje'
+  ];
+  
+  const matchesSpecificPhrase = specificPhrases.some(phrase => {
+    const matches = query.toLowerCase().includes(phrase);
+    if (matches) {
+      console.log(`✅ Zapytanie zawiera frazę wymagającą wyszukiwania: "${phrase}"`);
+    }
+    return matches;
+  });
+  
+  const shouldSearch = matchesPattern || matchesSpecificPhrase;
+  
+  console.log(`${shouldSearch ? '✅' : '❌'} Wynik analizy: ${shouldSearch ? 'WYMAGA' : 'NIE WYMAGA'} wyszukiwania`);
+  
+  return shouldSearch;
 }
 
 /**
@@ -261,20 +314,43 @@ ZASADY ODPOWIADANIA:
  */
 async function performSearch(query: string): Promise<any> {
   try {
-    // Tutaj możesz zaimplementować rzeczywiste wyszukiwanie z API
-    // Na razie zwracamy uproszczone wyniki
+    console.log(`🔍 Wykonuję wyszukiwanie dla: "${query}"`);
+    
+    const response = await fetch('/api/web-search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Błąd wyszukiwania: ${response.status} - ${errorData.error || 'Nieznany błąd'}`);
+    }
+
+    const searchData = await response.json();
+    
+    console.log(`✅ Znaleziono ${searchData.totalResults} wyników dla: "${query}"`);
+    
     return {
-      results: [
-        {
-          title: "Wynik wyszukiwania dla: " + query,
-          url: query.includes("http") ? query : "https://example.com/result",
-          snippet: "To jest przykładowy fragment wyników wyszukiwania dla zapytania: " + query
-        }
-      ]
+      query: searchData.query,
+      results: searchData.results || [],
+      totalResults: searchData.totalResults || 0,
+      source: searchData.source || 'unknown'
     };
+    
   } catch (error) {
-    console.error("Błąd wyszukiwania:", error);
-    return { error: "Nie udało się wykonać wyszukiwania" };
+    console.error("❌ Błąd wyszukiwania:", error);
+    
+    // Zwróć uproszczoną odpowiedź w przypadku błędu
+    return {
+      query,
+      results: [],
+      totalResults: 0,
+      error: error instanceof Error ? error.message : "Nie udało się wykonać wyszukiwania",
+      source: 'error'
+    };
   }
 }
 
@@ -330,145 +406,114 @@ export async function getOpenAIResponseWithWebSearch(
       console.log("Długość kontekstu dokumentów:", documentsContext.length);
     }
 
-    // ZMIENIONY SYSTEM PROMPT - Bardziej uniwersalny
-    const systemPrompt = `Jesteś pomocnym i wszechstronnym asystentem AI. Potrafisz odpowiadać na szeroki zakres pytań i pomagać w różnorodnych zadaniach. Odpowiadasz zawsze po polsku, zwięźle i rzeczowo.
-
-Możesz pomagać w:
-- Projektach UE i dokumentacji projektowej (to jest Twoja specjalizacja, ale nie jedyna dziedzina)
-- Odpowiadaniu na pytania ogólne z różnych dziedzin
-- Analizie dokumentów i danych
-- Programowaniu i technologii
-- Naukach ścisłych i humanistycznych
-- Biznesie i zarządzaniu
-- Edukacji i nauce
-- Kreatywnym pisaniu
-- Rozwiązywaniu problemów życiowych
-- Planowaniu i organizacji
-- I wielu innych obszarach
-
-${enableWebSearch ? 'Masz możliwość wyszukiwania informacji w internecie, aby zapewnić aktualne i dokładne odpowiedzi.' : 'Nie masz dostępu do internetu, więc opieraj się tylko na swoich wewnętrznych informacjach i udostępnionych dokumentach.'}
-
-FORMATOWANIE: Używaj składni Markdown, aby zapewnić dobrą czytelność odpowiedzi:
-1. Wszystkie listy punktowane formatuj używając myślników (-) i nowej linii dla każdego punktu
-2. Wszystkie listy numerowane formatuj jako 1., 2., itd., zawsze w nowej linii
-3. Używaj nagłówków (## dla głównych sekcji, ### dla podsekcji)
-4. Wydzielaj poszczególne sekcje pustymi liniami
-5. Używaj **pogrubienia** dla ważnych terminów i pojęć
-6. Nigdy nie używaj punktów oddzielonych tylko spacjami - zawsze używaj właściwego formatowania Markdown z nowymi liniami
-${enableWebSearch ? '7. Jeśli podajesz informacje znalezione w internecie, zawsze podawaj źródła w formie linków.' : ''}
-
-Jeśli użytkownik załączył jakieś dokumenty, to ważne, abyś bazował na ich treści w swojej odpowiedzi. Dokumenty są bardzo ważnym kontekstem dla Twoich odpowiedzi.
-
-ZASADY ODPOWIADANIA:
-- Odpowiadaj na wszystkie rozsądne pytania, nie ograniczaj się tylko do tematów zawodowych
-- Bądź pomocny, dokładny i rzetelny w każdej dziedzinie
-- Dostosuj poziom szczegółowości i ton do charakteru pytania
-- Jeśli nie znasz odpowiedzi, powiedz o tym szczerze i zaproponuj, gdzie można szukać informacji
-- Zachowuj profesjonalizm przy jednoczesnej życzliwości
-- Jeśli pytanie dotyczy szkodliwych, nielegalnych lub nieetycznych działań, grzecznie odmów i zaproponuj konstruktywne alternatywy`;
-    
-    // Dodaj kontekst dokumentów do promptu użytkownika
-    const userPromptWithContext = documentIds.length > 0 
-      ? `Dokumenty referencyjne:\n${documentsContext}\n\nPytanie użytkownika: ${prompt}\n\nOdpowiedz na podstawie dostarczonych dokumentów i swojej wiedzy ogólnej. Pamiętaj o prawidłowym formatowaniu Markdown.`
-      : `${prompt}\n\nPamiętaj o prawidłowym formatowaniu Markdown w odpowiedzi.`;
-
-    // Sprawdź, czy zapytanie może wymagać wyszukiwania w sieci i czy wyszukiwanie jest włączone
+    // Sprawdź, czy zapytanie może wymagać wyszukiwania w sieci
     const shouldUseWebSearch = enableWebSearch && shouldSearchWeb(prompt);
     
-    let response;
+    console.log(`🔍 Analiza zapytania: "${prompt}"`);
+    console.log(`📊 Wyszukiwanie włączone: ${enableWebSearch}`);
+    console.log(`🔍 Czy użyć wyszukiwania: ${shouldUseWebSearch}`);
+
+    // ZAKTUALIZOWANY SYSTEM PROMPT z lepszą obsługą wyszukiwania
+    const systemPrompt = `Jesteś pomocnym i wszechstronnym asystentem AI o nazwie MarsoftAI. 
+
+Twoje główne kompetencje:
+- Specjalizujesz się w projektach UE i dokumentacji projektowej
+- Potrafisz odpowiadać na szeroki zakres pytań z różnych dziedzin
+- Analizujesz dokumenty i dane
+- Pomagasz w programowaniu, naukach, biznesie i wielu innych obszarach
+
+${enableWebSearch 
+  ? `🌐 WYSZUKIWANIE W INTERNECIE: WŁĄCZONE
+Masz dostęp do aktualnych informacji z internetu. Gdy potrzebujesz najnowszych danych, aktualnych cen, bieżących wydarzeń lub informacji, które mogły się zmienić od Twojej ostatniej aktualizacji wiedzy, użyj funkcji wyszukiwania.
+
+KIEDY UŻYWAĆ WYSZUKIWANIA:
+- Aktualne ceny, kursy walut, notowania giełdowe
+- Najnowsze wiadomości i wydarzenia
+- Bieżące regulacje prawne i przepisy UE
+- Aktualne programy finansowania UE
+- Terminy naborów i konkursów
+- Sprawdzanie dat, terminów, aktualnych statusów
+- Weryfikacja aktualnych informacji kontaktowych
+- Sprawdzanie dostępności stron internetowych` 
+  : `🌐 WYSZUKIWANIE W INTERNECIE: WYŁĄCZONE
+Nie masz dostępu do internetu. Opieraj się tylko na swojej wewnętrznej wiedzy i udostępnionych dokumentach.`}
+
+FORMATOWANIE ODPOWIEDZI (Markdown):
+1. Listy punktowane: używaj myślników (-) w nowych liniach
+2. Listy numerowane: 1., 2., itd. w nowych liniach  
+3. Nagłówki: ## dla głównych sekcji, ### dla podsekcji
+4. Pogrubienia: **tekst** dla ważnych terminów
+5. Wydzielaj sekcje pustymi liniami
+${enableWebSearch ? '6. Źródła internetowe: zawsze podawaj linki do źródeł' : ''}
+
+ZASADY:
+- Odpowiadaj dokładnie i rzetelnie
+- Dostosuj ton do charakteru pytania  
+- Jeśli nie znasz odpowiedzi, powiedz to szczerze
+- Bazuj na udostępnionych dokumentach jako priorytet
+- Zachowuj profesjonalizm i życzliwość`;
     
-    if (shouldUseWebSearch) {
-      console.log("Używam wyszukiwania w sieci dla zapytania:", prompt);
-      // Użyj modelu z dostępem do funkcji wyszukiwania
-      response = await openai.chat.completions.create({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPromptWithContext }
-        ],
-        temperature: 1,
-        max_tokens: 4096,
-        tools: [
-          { type: "function", function: searchFunctionDefinition },
-          { type: "function", function: fetchUrlFunctionDefinition }
-        ],
-        tool_choice: "auto"
-      });
-      
-      // Sprawdź, czy model chce użyć narzędzia
-      const message = response.choices[0].message;
-      
-      if (message.tool_calls && message.tool_calls.length > 0) {
-        console.log("Model chce użyć narzędzia:", message.tool_calls);
-        
-        // Przygotuj tablicę na wyniki narzędzi
-        const toolResults: ChatCompletionMessageParam[] = [];
-        
-        // Obsłuż każde wywołanie narzędzia
-        for (const toolCall of message.tool_calls) {
-          const functionName = toolCall.function.name;
-          const functionArgs = JSON.parse(toolCall.function.arguments);
-          
-          if (functionName === 'search') {
-            console.log("Wykonuję wyszukiwanie:", functionArgs.query);
-            const searchResults = await performSearch(functionArgs.query);
-            
-            toolResults.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(searchResults)
-            });
-          }
-          
-          if (functionName === 'fetch_url') {
-            console.log("Pobieram treść strony:", functionArgs.url);
-            const fetchResults = await fetchWebContent(functionArgs.url);
-            
-            toolResults.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(fetchResults)
-            });
-          }
-        }
-        
-        // Dodaj wyniki do wiadomości i uzyskaj ostateczną odpowiedź
-        const finalResponse = await openai.chat.completions.create({
-          model: "gpt-4-turbo-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPromptWithContext },
-            message,
-            ...toolResults
-          ],
-          temperature: 1,
-          max_tokens: 4096,
-        });
-        
-        const finalContent = finalResponse.choices[0]?.message?.content || "Przepraszam, nie udało się uzyskać odpowiedzi.";
-        return improveMarkdownFormatting(finalContent);
-      }
-    } else {
-      console.log("Używam standardowego zapytania bez wyszukiwania w sieci");
-      // Użyj modelu bez dostępu do funkcji wyszukiwania
-      response = await openai.chat.completions.create({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPromptWithContext }
-        ],
-        temperature: 1,
-        max_tokens: 4096
-      });
+    let userPromptWithContext = prompt;
+    
+    // Dodaj kontekst dokumentów jeśli istnieją
+    if (documentsContext) {
+      userPromptWithContext = `Dokumenty referencyjne:\n${documentsContext}\n\nPytanie użytkownika: ${prompt}`;
     }
 
-    // Pobierz tekst odpowiedzi (wykonywane tylko jeśli nie było wywołań narzędzi)
+    let searchResults = "";
+    
+    // Wykonaj wyszukiwanie jeśli jest potrzebne
+    if (shouldUseWebSearch) {
+      console.log("🔍 Wykonuję wyszukiwanie w internecie...");
+      
+      const searchData = await performSearch(prompt);
+      
+      if (searchData.results && searchData.results.length > 0) {
+        searchResults = `\n\n🌐 WYNIKI WYSZUKIWANIA W INTERNECIE dla "${searchData.query}":\n\n`;
+        
+        searchData.results.forEach((result: any, index: number) => {
+          searchResults += `${index + 1}. **${result.title}**\n`;
+          searchResults += `   URL: ${result.url}\n`;
+          searchResults += `   Opis: ${result.snippet}\n`;
+          if (result.published) {
+            searchResults += `   Data: ${result.published}\n`;
+          }
+          searchResults += `\n`;
+        });
+        
+        searchResults += `Źródło wyszukiwania: ${searchData.source}\n`;
+        console.log(`✅ Dodano ${searchData.results.length} wyników wyszukiwania do kontekstu`);
+      } else if (searchData.error) {
+        searchResults = `\n\n⚠️ Błąd wyszukiwania: ${searchData.error}\n`;
+        console.log(`❌ Błąd wyszukiwania: ${searchData.error}`);
+      }
+    }
+
+    // Połącz wszystkie konteksty
+    const finalPrompt = userPromptWithContext + searchResults;
+
+    console.log(`📝 Wysyłam zapytanie do OpenAI (długość: ${finalPrompt.length} znaków)`);
+
+    // Wysłanie zapytania do OpenAI
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o", // Użyj najnowszego modelu
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: finalPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 4096
+    });
+
     const rawResponse = response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
+    
+    console.log(`✅ Otrzymano odpowiedź od OpenAI (długość: ${rawResponse.length} znaków)`);
     
     // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
     return improveMarkdownFormatting(rawResponse);
+    
   } catch (error) {
-    console.error('Błąd podczas pobierania odpowiedzi z OpenAI:', error);
+    console.error('❌ Błąd podczas pobierania odpowiedzi z OpenAI:', error);
     return "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
   }
 }
