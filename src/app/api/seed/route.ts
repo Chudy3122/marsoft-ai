@@ -2,8 +2,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
-
 export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Sprawdź, czy istnieją jakiekolwiek kategorie
@@ -17,19 +17,45 @@ export async function GET() {
         data: [
           {
             name: "Projekty UE",
-            parentId: null
+            description: "Dokumentacja i materiały dotyczące projektów Unii Europejskiej",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System MarsoftAI"
           },
           {
             name: "Wnioski o dofinansowanie",
-            parentId: null
+            description: "Szablony i przykłady wniosków o dofinansowanie ze środków UE",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System MarsoftAI"
           },
           {
             name: "Dokumentacja projektowa",
-            parentId: null
+            description: "Dokumenty projektowe, specyfikacje i wymagania",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System MarsoftAI"
           },
           {
             name: "Raporty i analizy",
-            parentId: null
+            description: "Raporty z realizacji projektów i analizy finansowe",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System MarsoftAI"
+          },
+          {
+            name: "Harmonogramy projektów",
+            description: "Plany czasowe i harmonogramy realizacji projektów",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System MarsoftAI"
+          },
+          {
+            name: "Budżety i rozliczenia",
+            description: "Budżety projektów, kosztorysy i dokumenty rozliczeniowe",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System MarsoftAI"
           }
         ]
       });
