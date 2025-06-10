@@ -1,9 +1,11 @@
 // src/app/api/knowledge/categories/check/route.ts
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 
 export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Sprawdź, czy istnieją jakiekolwiek kategorie
@@ -14,21 +16,39 @@ export async function GET() {
       await prisma.knowledgeCategory.createMany({
         data: [
           {
-            id: "1", 
             name: "Projekty UE",
-            parentId: null
+            description: "Dokumentacja i materiały dotyczące projektów Unii Europejskiej",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System"
           },
           {
-            id: "2",
             name: "Wnioski o dofinansowanie",
-            parentId: null
+            description: "Szablony i przykłady wniosków o dofinansowanie",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System"
+          },
+          {
+            name: "Harmonogramy projektów",
+            description: "Przykładowe harmonogramy i planowanie projektów",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System"
+          },
+          {
+            name: "Budżety i rozliczenia",
+            description: "Materiały dotyczące budżetowania i rozliczeń projektów UE",
+            isPublic: true,
+            createdBy: "system@marsoft.pl",
+            createdByName: "System"
           }
         ]
       });
       
       return NextResponse.json({ 
         message: 'Utworzono domyślne kategorie', 
-        categoriesCount: 2 
+        categoriesCount: 4 
       });
     }
     
@@ -38,6 +58,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Błąd podczas sprawdzania kategorii:', error);
-    return NextResponse.json({ error: 'Wystąpił problem podczas sprawdzania kategorii' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Wystąpił problem podczas sprawdzania kategorii',
+      details: error instanceof Error ? error.message : 'Nieznany błąd'
+    }, { status: 500 });
   }
 }
