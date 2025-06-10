@@ -2,8 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Category, Document } from '@/types/knowledge';
-import AdminUploadDocumentForm from './AdminUploadDocumentForm';
+import { Document } from '@/types/knowledge';
+import UserUploadDocumentForm from './UserUploadDocumentForm';
+import CreateCategoryForm from './CreateCategoryForm';
 
 interface KnowledgeLibraryPanelProps {
   isOpen: boolean;
@@ -20,43 +21,191 @@ export default function KnowledgeLibraryPanel({
   selectedDocumentIds,
   onApply
 }: KnowledgeLibraryPanelProps) {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>(selectedDocumentIds);
   const [isLoading, setIsLoading] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'all' | 'my'>('all');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+  const [currentCategoryOwner, setCurrentCategoryOwner] = useState<boolean>(false);
+
+  // Funkcja odświeżająca kategorie po dodaniu nowej
+  const handleCategoryAdded = () => {
+    fetchCategories();
+  };
+
+  // Funkcja odświeżająca dokumenty po dodaniu nowego
+  const handleDocumentAdded = () => {
+    if (selectedCategory) {
+      fetchDocuments(selectedCategory);
+    }
+  };
+
+  // Funkcja do sprawdzania dostępu do kategorii
+  const checkCategoryAccess = async (categoryId: string, category: any) => {
+    // Jeśli kategoria nie ma hasła lub użytkownik jest właścicielem
+    if (!category.hasPassword || category.isOwner) {
+      setSelectedCategory(categoryId);
+      return;
+    }
+
+    // Poproś o hasło
+    const password = prompt(`Kategoria "${category.name}" jest chroniona hasłem.\nPodaj hasło:`);
+    
+    if (!password) {
+      return; // Anulowano
+    }
+
+    try {
+      const response = await fetch(`/api/knowledge/categories/${categoryId}/verify-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password }),
+      });
+
+      if (response.ok) {
+        setSelectedCategory(categoryId);
+      } else {
+        const error = await response.json();
+        alert(`Błąd: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Błąd podczas weryfikacji hasła:', error);
+      alert('Wystąpił błąd podczas weryfikacji hasła');
+    }
+  };
+
+  // Funkcja usuwania kategorii
+  const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+    // Potwierdzenie usunięcia
+    const confirmDelete = confirm(
+      `Czy na pewno chcesz usunąć kategorię "${categoryName}"?\n\n` +
+      `⚠️ UWAGA: Ta operacja jest nieodwracalna!\n` +
+      `Kategoria zostanie usunięta wraz ze wszystkimi dokumentami w niej zawartymi.`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      console.log(`🗑️ Usuwanie kategorii: ${categoryId}`);
+      
+      const response = await fetch(`/api/knowledge/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Błąd podczas usuwania kategorii');
+      }
+
+      const result = await response.json();
+      console.log('✅ Kategoria usunięta pomyślnie:', result);
+
+      // Odśwież listę kategorii
+      await fetchCategories();
+      
+      // Jeśli usunięto aktualnie wybraną kategorię, wyczyść wybór
+      if (selectedCategory === categoryId) {
+        setSelectedCategory(null);
+        setDocuments([]);
+      }
+
+      // Pokaż komunikat o sukcesie
+      alert(`Kategoria "${categoryName}" została pomyślnie usunięta.`);
+
+    } catch (error) {
+      console.error('❌ Błąd podczas usuwania kategorii:', error);
+      alert(`Błąd podczas usuwania kategorii: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+    }
+  };
+
+  // Funkcja usuwania dokumentu
+  const handleDeleteDocument = async (documentId: string, documentTitle: string) => {
+    // Potwierdzenie usunięcia
+    const confirmDelete = confirm(
+      `Czy na pewno chcesz usunąć dokument "${documentTitle}"?\n\n` +
+      `⚠️ UWAGA: Ta operacja jest nieodwracalna!\n` +
+      `Dokument zostanie trwale usunięty z serwera.`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      console.log(`🗑️ Usuwanie dokumentu: ${documentId}`);
+      
+      const response = await fetch(`/api/knowledge/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Błąd podczas usuwania dokumentu');
+      }
+
+      const result = await response.json();
+      console.log('✅ Dokument usunięty pomyślnie:', result);
+
+      // Odśwież listę dokumentów w aktualnej kategorii
+      if (selectedCategory) {
+        await fetchDocuments(selectedCategory);
+      }
+
+      // Usuń dokument z listy wybranych jeśli był wybrany
+      if (selectedDocIds.includes(documentId)) {
+        setSelectedDocIds(selectedDocIds.filter(id => id !== documentId));
+      }
+
+      // Pokaż komunikat o sukcesie (opcjonalnie - można usunąć jeśli za dużo alertów)
+      // alert(`Dokument "${documentTitle}" został pomyślnie usunięty.`);
+
+    } catch (error) {
+      console.error('❌ Błąd podczas usuwania dokumentu:', error);
+      alert(`Błąd podczas usuwania dokumentu: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+    }
+  };
 
   // Pobieranie kategorii
   useEffect(() => {
     if (isOpen) {
       fetchCategories();
-      
-      // Sprawdź czy użytkownik jest adminem
-      const checkAdmin = async () => {
-        try {
-          const response = await fetch('/api/auth/check-admin');
-          if (response.ok) {
-            const data = await response.json();
-            setIsAdmin(data.isAdmin);
+      // Pobierz email użytkownika z sesji (można to zrobić przez API call)
+      fetch('/api/auth/session')
+        .then(res => res.json())
+        .then(data => {
+          if (data.user?.email) {
+            setCurrentUserEmail(data.user.email);
           }
-        } catch (error) {
-          console.error('Błąd podczas sprawdzania uprawnień:', error);
-        }
-      };
-      
-      checkAdmin();
+        })
+        .catch(err => console.warn('Nie udało się pobrać danych sesji'));
     }
   }, [isOpen]);
 
-  // Pobieranie dokumentów, gdy wybrano kategorię
+  // Pobieranie dokumentów, gdy wybrano kategorię lub zmieniono tryb wyświetlania
   useEffect(() => {
     if (selectedCategory) {
       fetchDocuments(selectedCategory);
+      // Sprawdź czy użytkownik jest właścicielem wybranej kategorii
+      const category = categories.find(cat => cat.id === selectedCategory);
+      setCurrentCategoryOwner(category?.isOwner || false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, viewMode, categories]);
 
   const fetchCategories = async () => {
     setIsLoading(true);
@@ -94,7 +243,8 @@ export default function KnowledgeLibraryPanel({
     
     try {
       console.log("Pobieranie dokumentów dla kategorii:", categoryId);
-      const response = await fetch(`/api/knowledge/documents?categoryId=${categoryId}`);
+      const url = `/api/knowledge/documents?categoryId=${categoryId}${viewMode === 'my' ? '&onlyMy=true' : ''}`;
+      const response = await fetch(url);
       console.log("Status odpowiedzi:", response.status);
       
       if (!response.ok) {
@@ -172,12 +322,11 @@ export default function KnowledgeLibraryPanel({
     }
   };
 
-  // Funkcja odświeżająca dokumenty po dodaniu nowego
-  const handleDocumentAdded = () => {
-    if (selectedCategory) {
-      fetchDocuments(selectedCategory);
-    }
-  };
+  // Filtrowanie dokumentów po wyszukiwaniu
+  const filteredDocuments = documents.filter(doc =>
+    doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   return (
     <div style={{
@@ -196,60 +345,141 @@ export default function KnowledgeLibraryPanel({
         backgroundColor: 'white',
         borderRadius: '8px',
         boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        width: '80%',
-        maxWidth: '900px',
-        maxHeight: '80vh',
+        width: '85%',
+        maxWidth: '1000px',
+        maxHeight: '85vh',
         display: 'flex',
         flexDirection: 'column'
       }}>
         {/* Nagłówek */}
         <div style={{
-            padding: '16px',
-            borderBottom: '1px solid #e5e7eb',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-            }}>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>Biblioteka Wiedzy</h2>
-            <div>
-                {isAdmin && (
-                <button
-                    onClick={() => setShowUploadForm(true)}
-                    style={{
-                    marginRight: '12px',
-                    padding: '6px 12px',
-                    backgroundColor: '#a3cd39',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                    }}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    Dodaj dokument
-                </button>
-                )}
-                <button 
-                onClick={onClose}
-                style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '20px'
-                }}
-                >
-                &times;
-                </button>
-            </div>
-            </div>
+          padding: '16px',
+          borderBottom: '1px solid #e5e7eb',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <h2 style={{ margin: 0, fontSize: '18px' }}>Biblioteka Wiedzy</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Przycisk tworzenia kategorii */}
+            <button
+              onClick={() => setShowCreateCategory(true)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#f3f4f6',
+                color: '#374151',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginRight: '8px'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Nowa kategoria
+            </button>
+            
+            {/* Przycisk dodawania dokumentu - teraz dostępny dla wszystkich */}
+            <button
+              onClick={() => setShowUploadForm(true)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#a3cd39',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              Dodaj dokument
+            </button>
+            
+            <button 
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '20px'
+              }}
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+
+        {/* Filtry i wyszukiwanie */}
+        <div style={{
+          padding: '16px',
+          borderBottom: '1px solid #e5e7eb',
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center'
+        }}>
+          {/* Wyszukiwanie */}
+          <div style={{ flex: 1 }}>
+            <input
+              type="text"
+              placeholder="Szukaj dokumentów..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+            />
+          </div>
+
+          {/* Przełącznik widoku */}
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={() => setViewMode('all')}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: viewMode === 'all' ? '#a3cd39' : 'white',
+                color: viewMode === 'all' ? 'white' : '#374151',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              Wszystkie
+            </button>
+            <button
+              onClick={() => setViewMode('my')}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: viewMode === 'my' ? '#a3cd39' : 'white',
+                color: viewMode === 'my' ? 'white' : '#374151',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              Moje dokumenty
+            </button>
+          </div>
+        </div>
 
         {/* Zawartość */}
         <div style={{
@@ -274,7 +504,7 @@ export default function KnowledgeLibraryPanel({
               {categories.map(category => (
                 <li key={category.id}>
                   <button
-                    onClick={() => setSelectedCategory(category.id)}
+                    onClick={() => checkCategoryAccess(category.id, category)}
                     style={{
                       padding: '8px 12px',
                       width: '100%',
@@ -282,10 +512,73 @@ export default function KnowledgeLibraryPanel({
                       background: selectedCategory === category.id ? '#f3f4f6' : 'none',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
                     }}
                   >
-                    {category.name}
+                    <div>
+                      <div style={{ fontWeight: 500 }}>
+                        {category.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {!category.isPublic && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            🔒 Prywatna
+                          </span>
+                        )}
+                        {category.hasPassword && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            🔑 Hasło
+                          </span>
+                        )}
+                        {category.isOwner && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            👤 Moja
+                          </span>
+                        )}
+                        {!category.isOwner && !category.hasPassword && category.isPublic && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            📁 Publiczna
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Przycisk usuwania kategorii - tylko dla właściciela */}
+                    {category.isOwner && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCategory(category.id, category.name);
+                        }}
+                        style={{
+                          padding: '4px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          opacity: 0.7,
+                          transition: 'all 0.2s'
+                        }}
+                        title="Usuń kategorię"
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.opacity = '1';
+                          e.currentTarget.style.backgroundColor = '#fee2e2';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.opacity = '0.7';
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18"></path>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                      </button>
+                    )}
                   </button>
                 </li>
               ))}
@@ -298,45 +591,116 @@ export default function KnowledgeLibraryPanel({
             overflowY: 'auto',
             padding: '16px'
           }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>Dokumenty</h3>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
+              Dokumenty 
+              {viewMode === 'my' && ' (moje)'}
+              {searchTerm && ` (wyszukiwanie: "${searchTerm}")`}
+            </h3>
             {isLoading && <div>Ładowanie...</div>}
             {error && <div style={{ color: 'red' }}>{error}</div>}
-            {documents.length === 0 && !isLoading && !error && (
-              <div>Brak dokumentów w wybranej kategorii</div>
+            {filteredDocuments.length === 0 && !isLoading && !error && (
+              <div>
+                {searchTerm 
+                  ? `Brak dokumentów pasujących do "${searchTerm}"`
+                  : `Brak dokumentów w wybranej kategorii`
+                }
+              </div>
             )}
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {documents.map(doc => (
+              {filteredDocuments.map(doc => (
                 <li key={doc.id} style={{
-                  padding: '8px 12px',
+                  padding: '12px',
                   borderBottom: '1px solid #f3f4f6',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'flex-start',
+                  backgroundColor: selectedDocIds.includes(doc.id) ? '#f0fdf4' : 'transparent',
+                  borderRadius: '4px',
+                  marginBottom: '4px'
                 }}>
                   <input
                     type="checkbox"
                     id={`doc-${doc.id}`}
                     checked={selectedDocIds.includes(doc.id)}
                     onChange={() => handleDocumentToggle(doc.id)}
-                    style={{ marginRight: '12px' }}
+                    style={{ marginRight: '12px', marginTop: '2px' }}
                   />
                   <label 
                     htmlFor={`doc-${doc.id}`}
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       flex: 1,
                       cursor: 'pointer'
                     }}
                   >
-                    <div style={{ marginRight: '8px' }}>
+                    <div style={{ marginRight: '12px', marginTop: '2px' }}>
                       {getDocumentIcon(doc.fileType)}
                     </div>
-                    <div>
-                      <div>{doc.title}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                        {new Date(doc.createdAt).toLocaleDateString()}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500, marginBottom: '4px' }}>
+                        {doc.title}
+                      </div>
+                      {doc.description && (
+                        <div style={{ 
+                          fontSize: '13px', 
+                          color: '#6b7280',
+                          marginBottom: '4px'
+                        }}>
+                          {doc.description}
+                        </div>
+                      )}
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#9ca3af',
+                        display: 'flex',
+                        gap: '12px'
+                      }}>
+                        <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>{doc.uploadedBy || 'Nieznany użytkownik'}</span>
+                        {doc.fileSize && (
+                          <>
+                            <span>•</span>
+                            <span>{(doc.fileSize / 1024).toFixed(1)} KB</span>
+                          </>
+                        )}
                       </div>
                     </div>
+                    {/* Przycisk usuwania dokumentu - tylko dla właściciela dokumentu lub kategorii */}
+                    {(doc.uploadedByEmail === currentUserEmail || currentCategoryOwner) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDocument(doc.id, doc.title);
+                        }}
+                        style={{
+                          marginLeft: '8px',
+                          padding: '4px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          opacity: 0.7,
+                          transition: 'all 0.2s'
+                        }}
+                        title="Usuń dokument"
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.opacity = '1';
+                          e.currentTarget.style.backgroundColor = '#fee2e2';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.opacity = '0.7';
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18"></path>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                      </button>
+                    )}
                   </label>
                 </li>
               ))}
@@ -352,8 +716,11 @@ export default function KnowledgeLibraryPanel({
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <div>
-            Wybrano dokumentów: {selectedDocIds.length}
+          <div style={{ fontSize: '14px', color: '#6b7280' }}>
+            Wybrano dokumentów: <strong>{selectedDocIds.length}</strong>
+            {filteredDocuments.length > 0 && (
+              <span> z {filteredDocuments.length} dostępnych</span>
+            )}
           </div>
           <div>
             <button
@@ -382,28 +749,49 @@ export default function KnowledgeLibraryPanel({
                 opacity: currentChatId ? 1 : 0.6
               }}
             >
-              Zastosuj wybrane
+              Zastosuj wybrane ({selectedDocIds.length})
             </button>
           </div>
         </div>
       </div>
+      
+      {showCreateCategory && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }}>
+          <CreateCategoryForm 
+            onClose={() => setShowCreateCategory(false)} 
+            onCategoryCreated={handleCategoryAdded}
+          />
+        </div>
+      )}
+      
       {showUploadForm && (
         <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 2000
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
         }}>
-            <AdminUploadDocumentForm 
-              onClose={() => setShowUploadForm(false)} 
-              onDocumentAdded={handleDocumentAdded}
-            />
+          <UserUploadDocumentForm 
+            onClose={() => setShowUploadForm(false)} 
+            onDocumentAdded={handleDocumentAdded}
+          />
         </div>
       )}
     </div>

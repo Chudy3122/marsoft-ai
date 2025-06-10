@@ -9,13 +9,19 @@ export interface Category {
   }
   
   export interface Document {
-    id: string;
-    title: string;
-    fileType: string;
-    categoryId: string;
-    createdAt: string;
-    updatedAt?: string;
-  }
+  id: string;
+  title: string;
+  description?: string; // Dodano description
+  fileType: string;
+  fileSize?: number; // Dodano fileSize
+  uploadedBy?: string; // Dodano uploadedBy
+  uploadedByEmail?: string; // Dodano uploadedByEmail  
+  categoryId: string;
+  categoryName?: string;
+  createdAt: string;
+  updatedAt: string;
+  isOwner?: boolean; // Dodano isOwner
+}
   
   export interface DocumentContent extends Document {
     content: string;

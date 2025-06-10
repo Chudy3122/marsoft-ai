@@ -1211,7 +1211,7 @@ export default function ChatComponent() {
 
             {/* Biblioteka Wiedzy - zastosuj ten sam styl czcionki */}
             <button
-              onClick={() => {/* Pokaż bibliotekę wiedzy */}}
+              onClick={() => setShowLibrary(true)}
               title="Biblioteka Wiedzy"
               style={{
                 display: 'flex',

@@ -59,25 +59,47 @@ model Document {
 }
 
 model KnowledgeCategory {
-  id            String              @id @default(uuid())
-  name          String
-  parentId      String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  parent        KnowledgeCategory?  @relation("SubCategories", fields: [parentId], references: [id])
-  subCategories KnowledgeCategory[] @relation("SubCategories")
-  documents     KnowledgeDocument[]
+  id          String              @id @default(cuid())
+  name        String              @unique
+  description String?
+  
+  // Nowe pola dla uprawnień i zabezpieczeń
+  isPublic    Boolean             @default(true)  // Czy kategoria jest publiczna
+  password    String?             // Hasło do kategorii (opcjonalne)
+  createdBy   String              // Email twórcy kategorii
+  createdByName String?           // Nazwa twórcy kategorii
+  
+  documents   KnowledgeDocument[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  
+  @@map("knowledge_categories")
 }
 
 model KnowledgeDocument {
-  id         String            @id @default(uuid())
-  title      String
-  fileType   String
-  content    String
-  categoryId String
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  category   KnowledgeCategory @relation(fields: [categoryId], references: [id])
+  id               String   @id @default(cuid())
+  title            String
+  description      String?  // Pole description
+  fileName         String   // Nazwa pliku na serwerze
+  originalFileName String   // Oryginalna nazwa pliku
+  filePath         String   // Ścieżka do pliku
+  fileType         String   // pdf, excel, word, txt
+  fileSize         Int      // Rozmiar w bajtach - pole fileSize
+  content          String?  @db.Text // Wyekstrahowany tekst
+  
+  // Informacje o użytkowniku - pola uploadedBy
+  uploadedBy       String   // Email użytkownika
+  uploadedByName   String?  // Nazwa użytkownika
+  
+  // Relacje
+  categoryId       String
+  category         KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@map("knowledge_documents")
 }
 
 model Project {
