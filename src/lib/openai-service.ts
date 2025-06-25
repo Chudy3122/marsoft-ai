@@ -144,55 +144,105 @@ async function getDocument(documentId: string): Promise<any> {
 
 /**
  * Pobieranie treści dokumentów z bazy danych i biblioteki wiedzy
+ * POPRAWIONA WERSJA - robi jedno zapytanie dla wszystkich dokumentów
  */
 async function getDocumentsContent(documentIds: string[]): Promise<string> {
   if (documentIds.length === 0) return "";
   
   try {
-    console.log("Pobieranie treści dokumentów:", documentIds);
+    console.log("📚 === START getDocumentsContent ===");
+    console.log("📋 Pobieranie treści dokumentów:", documentIds);
     
-    // Przygotuj listę obietnic dla wszystkich żądań
-    const documentPromises = documentIds.map(async (docId) => {
-      // Najpierw sprawdź czy dokument pochodzi z biblioteki wiedzy
-      try {
-        const response = await fetch(`/api/knowledge/documents/content?ids=${docId}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.documents && data.documents.length > 0) {
-            return data.documents[0]; // Zwróć dokument z biblioteki wiedzy
-          }
-        }
-      } catch (error) {
-        console.warn(`Błąd podczas próby pobrania dokumentu ${docId} z biblioteki wiedzy:`, error);
-      }
+    // 🔥 POPRAWKA 1: Jedno zapytanie dla wszystkich dokumentów z biblioteki wiedzy
+    try {
+      const url = `/api/knowledge/documents/content?ids=${documentIds.join(',')}`;
+      console.log(`📡 Wywołuję API biblioteki wiedzy: ${url}`);
       
-      // Jeśli nie znaleziono w bibliotece wiedzy, spróbuj pobrać z czatu
+      const response = await fetch(url);
+      console.log(`📨 Status odpowiedzi biblioteki wiedzy: ${response.status}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`📄 Odpowiedź API biblioteki wiedzy:`, {
+          hasDocuments: !!data.documents,
+          documentsCount: data.documents?.length || 0,
+          success: data.success
+        });
+        
+        if (data.documents && data.documents.length > 0) {
+          console.log(`✅ Znaleziono ${data.documents.length} dokumentów w bibliotece wiedzy`);
+          
+          let documentsText = "";
+          
+          for (const doc of data.documents) {
+            if (doc.content) {
+              const docText = `\n### Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n${doc.content}\n\n`;
+              documentsText += docText;
+              console.log(`➕ Dodano dokument "${doc.title}" - długość: ${doc.content.length} znaków`);
+            } else {
+              console.warn(`⚠️ Dokument ${doc.id} "${doc.title}" nie zawiera treści`);
+            }
+          }
+          
+          console.log(`📚 === END getDocumentsContent ===`);
+          console.log(`📊 FINAL: Zwracam treść ${data.documents.length} dokumentów, łączna długość: ${documentsText.length} znaków`);
+          
+          if (documentsText.length > 0) {
+            console.log(`📝 Pierwsze 200 znaków: ${documentsText.substring(0, 200)}...`);
+            return documentsText;
+          }
+        } else {
+          console.log(`⚠️ API biblioteki wiedzy zwróciło pustą listę dokumentów`);
+        }
+      } else {
+        console.log(`❌ Błąd HTTP ${response.status} z biblioteki wiedzy`);
+        const errorText = await response.text();
+        console.log(`❌ Treść błędu: ${errorText}`);
+      }
+    } catch (error) {
+      console.warn(`❌ Błąd podczas pobierania z biblioteki wiedzy:`, error);
+    }
+    
+    // 🔥 POPRAWKA 2: Fallback do starych dokumentów z czatu (jedno za razem)
+    console.log(`🔄 Próba pobrania dokumentów z czatu jako fallback...`);
+    
+    const documentPromises = documentIds.map(async (docId) => {
+      console.log(`🔍 Próba pobrania dokumentu z czatu: ${docId}`);
       return getDocument(docId);
     });
     
-    // Wykonaj wszystkie żądania równolegle
     const documents = await Promise.all(documentPromises);
+    const validDocuments = documents.filter(doc => {
+      const isValid = doc !== null && doc !== undefined && doc.content;
+      console.log(`🔍 Dokument ${doc?.id || 'unknown'} z czatu valid: ${isValid}, content length: ${doc?.content?.length || 0}`);
+      return isValid;
+    });
     
-    // Filtruj niepuste dokumenty
-    const validDocuments = documents.filter(doc => doc !== null && doc.content);
-    
-    // Upewnij się, że zwracany string zawiera pełną treść dokumentów
-    let documentsText = "";
-    
-    for (const doc of validDocuments) {
-      if (doc.content) {
-        documentsText += `\n### Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n${doc.content}\n\n`;
-      } else {
-        console.warn(`Dokument ${doc.id} nie zawiera treści`);
+    if (validDocuments.length > 0) {
+      console.log(`✅ Znaleziono ${validDocuments.length} dokumentów w czacie`);
+      
+      let documentsText = "";
+      
+      for (const doc of validDocuments) {
+        if (doc.content) {
+          const docText = `\n### Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n${doc.content}\n\n`;
+          documentsText += docText;
+          console.log(`➕ Dodano dokument z czatu "${doc.title}" - długość: ${doc.content.length} znaków`);
+        }
       }
+      
+      console.log(`📚 === END getDocumentsContent (czat fallback) ===`);
+      console.log(`📊 FINAL: Zwracam treść ${validDocuments.length} dokumentów z czatu, łączna długość: ${documentsText.length} znaków`);
+      
+      return documentsText;
     }
     
-    console.log(`Pobrano treść ${validDocuments.length} dokumentów, łączna długość: ${documentsText.length} znaków`);
+    console.log(`❌ Nie znaleziono żadnych dokumentów z treścią`);
+    return "";
     
-    return documentsText;
   } catch (error) {
-    console.error('Błąd podczas pobierania treści dokumentów:', error);
-    return "Nie udało się pobrać treści dokumentów.";
+    console.error('❌ KRYTYCZNY BŁĄD podczas pobierania treści dokumentów:', error);
+    return "";
   }
 }
 
@@ -399,11 +449,18 @@ export async function getOpenAIResponseWithWebSearch(
   enableWebSearch: boolean = true
 ): Promise<string> {
   try {
-    // Pobierz treść dokumentów, jeśli są
+    // 🔥 POPRAWKA: Pobierz treść dokumentów PRZED przygotowaniem promptu
     let documentsContext = "";
     if (documentIds.length > 0) {
+      console.log(`📚 Pobieranie treści ${documentIds.length} dokumentów...`);
       documentsContext = await getDocumentsContent(documentIds);
-      console.log("Długość kontekstu dokumentów:", documentsContext.length);
+      console.log(`📊 Otrzymano kontekst dokumentów o długości: ${documentsContext.length} znaków`);
+      
+      if (documentsContext.length > 0) {
+        console.log(`📝 Pierwsze 200 znaków kontekstu: ${documentsContext.substring(0, 200)}...`);
+      } else {
+        console.warn(`⚠️ Kontekst dokumentów jest pusty mimo ${documentIds.length} ID`);
+      }
     }
 
     // Sprawdź, czy zapytanie może wymagać wyszukiwania w sieci
@@ -451,13 +508,23 @@ ZASADY:
 - Dostosuj ton do charakteru pytania  
 - Jeśli nie znasz odpowiedzi, powiedz to szczerze
 - Bazuj na udostępnionych dokumentach jako priorytet
-- Zachowuj profesjonalizm i życzliwość`;
+- Zachowaj profesjonalizm i życzliwość
+
+${documentsContext ? '**WAŻNE: Masz dostęp do dokumentów referencyjnych. Bazuj na nich w pierwszej kolejności przy odpowiadaniu na pytania.**' : ''}`;
     
+    // 🔥 POPRAWKA: Poprawnie skonstruuj prompt z dokumentami
     let userPromptWithContext = prompt;
     
     // Dodaj kontekst dokumentów jeśli istnieją
     if (documentsContext) {
-      userPromptWithContext = `Dokumenty referencyjne:\n${documentsContext}\n\nPytanie użytkownika: ${prompt}`;
+      userPromptWithContext = `📋 DOKUMENTY REFERENCYJNE:
+${documentsContext}
+
+💬 PYTANIE UŻYTKOWNIKA: ${prompt}
+
+Odpowiedz na pytanie bazując przede wszystkim na dostarczonych dokumentach. Jeśli informacje w dokumentach nie są wystarczające, uzupełnij je swoją wiedzą${enableWebSearch ? ' lub wyszukiwaniem w internecie' : ''}.`;
+      
+      console.log(`✅ Dodano kontekst dokumentów do promptu (długość: ${documentsContext.length} znaków)`);
     }
 
     let searchResults = "";
@@ -489,10 +556,13 @@ ZASADY:
       }
     }
 
-    // Połącz wszystkie konteksty
+    // 🔥 POPRAWKA: Połącz wszystkie konteksty POPRAWNIE
     const finalPrompt = userPromptWithContext + searchResults;
 
-    console.log(`📝 Wysyłam zapytanie do OpenAI (długość: ${finalPrompt.length} znaków)`);
+    console.log(`📝 Wysyłam zapytanie do OpenAI:`);
+    console.log(`   - Długość promptu: ${finalPrompt.length} znaków`);
+    console.log(`   - Ma dokumenty: ${documentsContext.length > 0}`);
+    console.log(`   - Ma wyszukiwanie: ${searchResults.length > 0}`);
 
     // Wysłanie zapytania do OpenAI
     const response = await openai.chat.completions.create({

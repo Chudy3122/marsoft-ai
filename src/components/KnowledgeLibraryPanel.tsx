@@ -503,8 +503,7 @@ export default function KnowledgeLibraryPanel({
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {categories.map(category => (
                 <li key={category.id}>
-                  <button
-                    onClick={() => checkCategoryAccess(category.id, category)}
+                  <div
                     style={{
                       padding: '8px 12px',
                       width: '100%',
@@ -518,7 +517,14 @@ export default function KnowledgeLibraryPanel({
                       justifyContent: 'space-between'
                     }}
                   >
-                    <div>
+                    {/* Główny obszar kategorii - kliknij aby wybrać */}
+                    <div 
+                      onClick={() => checkCategoryAccess(category.id, category)}
+                      style={{
+                        flex: 1,
+                        cursor: 'pointer'
+                      }}
+                    >
                       <div style={{ fontWeight: 500 }}>
                         {category.name}
                       </div>
@@ -545,7 +551,8 @@ export default function KnowledgeLibraryPanel({
                         )}
                       </div>
                     </div>
-                    {/* Przycisk usuwania kategorii - tylko dla właściciela */}
+                    
+                    {/* Przycisk usuwania kategorii - tylko dla właściciela - OSOBNY PRZYCISK */}
                     {category.isOwner && (
                       <button
                         onClick={(e) => {
@@ -579,7 +586,7 @@ export default function KnowledgeLibraryPanel({
                         </svg>
                       </button>
                     )}
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -624,8 +631,10 @@ export default function KnowledgeLibraryPanel({
                     onChange={() => handleDocumentToggle(doc.id)}
                     style={{ marginRight: '12px', marginTop: '2px' }}
                   />
-                  <label 
-                    htmlFor={`doc-${doc.id}`}
+                  
+                  {/* Główny obszar dokumentu - kliknij aby zaznaczyć checkbox */}
+                  <div 
+                    onClick={() => handleDocumentToggle(doc.id)}
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -666,42 +675,43 @@ export default function KnowledgeLibraryPanel({
                         )}
                       </div>
                     </div>
-                    {/* Przycisk usuwania dokumentu - tylko dla właściciela dokumentu lub kategorii */}
-                    {(doc.uploadedByEmail === currentUserEmail || currentCategoryOwner) && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteDocument(doc.id, doc.title);
-                        }}
-                        style={{
-                          marginLeft: '8px',
-                          padding: '4px',
-                          backgroundColor: 'transparent',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          borderRadius: '4px',
-                          opacity: 0.7,
-                          transition: 'all 0.2s'
-                        }}
-                        title="Usuń dokument"
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.opacity = '1';
-                          e.currentTarget.style.backgroundColor = '#fee2e2';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.opacity = '0.7';
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18"></path>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
-                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                      </button>
-                    )}
-                  </label>
+                  </div>
+                  
+                  {/* Przycisk usuwania dokumentu - OSOBNY PRZYCISK poza obszarem kliknięcia */}
+                  {(doc.uploadedByEmail === currentUserEmail || currentCategoryOwner) && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteDocument(doc.id, doc.title);
+                      }}
+                      style={{
+                        marginLeft: '8px',
+                        padding: '4px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        opacity: 0.7,
+                        transition: 'all 0.2s'
+                      }}
+                      title="Usuń dokument"
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                        e.currentTarget.style.backgroundColor = '#fee2e2';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.opacity = '0.7';
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

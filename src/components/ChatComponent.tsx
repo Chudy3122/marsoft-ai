@@ -627,36 +627,37 @@ export default function ChatComponent() {
 };
 
   // Funkcja pomocnicza do obsługi odpowiedzi z OpenAI
-  const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
-    try {
-      console.log("Aktywne dokumenty:", activeDocumentIds);
+const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
+  try {
+    console.log("🔍 === START getAIResponseWithFallback ===");
+    console.log("📋 Aktywne dokumenty:", activeDocumentIds);
+    console.log("🌐 Wyszukiwanie web:", webSearchEnabled);
+    
+    // 🔥 UPROSZCZENIE: Zawsze używaj głównej funkcji - ona sama pobierze dokumenty
+    if (activeDocumentIds.length > 0) {
+      console.log(`📚 Używam ${activeDocumentIds.length} aktywnych dokumentów z biblioteki wiedzy`);
+      return await getOpenAIResponseWithWebSearch(prompt, activeDocumentIds, webSearchEnabled);
+    } 
+    // Fallback do starych dokumentów wczytanych bezpośrednio do czatu (kompatybilność wsteczna)
+    else if (documentText && documentMetadata && documentChatId === currentChatId) {
+      console.log("📄 Używam pojedynczego dokumentu jako fallback:", documentType, documentMetadata.title);
       
-      // Używamy zawsze aktywnych dokumentów jako głównego źródła informacji
-      if (activeDocumentIds.length > 0) {
-        console.log(`Używam ${activeDocumentIds.length} aktywnych dokumentów do zapytania AI`);
-        // Użyj nowej funkcji z parametrem webSearchEnabled
-        return await getOpenAIResponseWithWebSearch(prompt, activeDocumentIds, webSearchEnabled);
-      } 
-      // Jeśli nie ma aktywnych dokumentów, ale jest pojedynczy dokument wczytany
-      else if (documentText && documentMetadata && documentChatId === currentChatId) {
-        console.log("Używam pojedynczego dokumentu jako fallback:", documentType, documentMetadata.title);
-        
-        // Obsługa PDF/Excel bez aktualizacji activeDocumentIds (dla wstecznej kompatybilności)
-        if (documentType === 'pdf') {
-          return await analyzePdfWithOpenAI(documentText, documentMetadata, prompt);
-        } else if (documentType === 'excel') {
-          return await analyzeExcelWithOpenAI(documentText, documentMetadata, prompt);
-        }
+      if (documentType === 'pdf') {
+        return await analyzePdfWithOpenAI(documentText, documentMetadata, prompt, [], webSearchEnabled);
+      } else if (documentType === 'excel') {
+        return await analyzeExcelWithOpenAI(documentText, documentMetadata, prompt, [], webSearchEnabled);
       }
-      
-      // Standardowe zapytanie bez dokumentów, ale z opcją wyszukiwania
-      console.log("Używam standardowego zapytania bez dokumentów");
-      return await getOpenAIResponseWithWebSearch(prompt, [], webSearchEnabled);
-    } catch (error) {
-      console.error("Błąd w getOpenAIResponse:", error);
-      return "Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie za chwilę.";
     }
-  };
+    
+    // Standardowe zapytanie bez dokumentów
+    console.log("💬 Używam standardowego zapytania bez dokumentów");
+    return await getOpenAIResponseWithWebSearch(prompt, [], webSearchEnabled);
+    
+  } catch (error) {
+    console.error("❌ Błąd w getAIResponseWithFallback:", error);
+    return "Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie za chwilę.";
+  }
+};
 
   // Formatowanie daty dla wiadomości
   const formatMessageTime = (date: Date) => {

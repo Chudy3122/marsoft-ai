@@ -11,6 +11,53 @@ const prisma = new PrismaClient();
 export const maxDuration = 60; // 60 sekund
 export const runtime = 'nodejs';
 
+// Funkcja do ekstrakcji tekstu z PDF
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  try {
+    const pdfParse = (await import('pdf-parse')).default;
+    const pdfData = await pdfParse(buffer);
+    return pdfData.text || '';
+  } catch (error) {
+    console.error('Błąd podczas ekstrakcji tekstu z PDF:', error);
+    return '';
+  }
+}
+
+// Funkcja do ekstrakcji tekstu z Excela
+async function extractTextFromExcel(buffer: Buffer): Promise<string> {
+  try {
+    const XLSX = (await import('xlsx')).default;
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    
+    let extractedText = '';
+    
+    // Przejdź przez wszystkie arkusze
+    workbook.SheetNames.forEach((sheetName) => {
+      extractedText += `\n### Arkusz: ${sheetName}\n`;
+      const sheet = workbook.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(sheet);
+      extractedText += csv + '\n';
+    });
+    
+    return extractedText;
+  } catch (error) {
+    console.error('Błąd podczas ekstrakcji tekstu z Excel:', error);
+    return '';
+  }
+}
+
+// Funkcja do ekstrakcji tekstu z Worda
+async function extractTextFromWord(buffer: Buffer): Promise<string> {
+  try {
+    const mammoth = (await import('mammoth')).default;
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value || '';
+  } catch (error) {
+    console.error('Błąd podczas ekstrakcji tekstu z Word:', error);
+    return '';
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('🔥 Upload endpoint wywołany');
@@ -104,7 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sprawdź typ pliku (uproszczone)
+    // Sprawdź typ pliku
     const allowedTypes = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -135,8 +182,7 @@ export async function POST(request: NextRequest) {
     const fileName = `${uuidv4()}.${fileExtension}`;
     const originalFileName = file.name;
 
-    // WAŻNE: Na Vercel nie możemy zapisywać plików na dysku!
-    // Zamiast tego konwertujemy plik na base64 i zapisujemy w bazie danych
+    // Konwertuj plik na buffer
     let fileBuffer;
     try {
       const bytes = await file.arrayBuffer();
@@ -154,27 +200,39 @@ export async function POST(request: NextRequest) {
 
     console.log(`💾 Plik przekonwertowany do base64, rozmiar: ${fileBase64.length} znaków`);
 
-    // Uproszczona ekstrakcja tekstu
-    let extractedText = `Dokument: ${originalFileName}`;
+    // WŁAŚCIWA EKSTRAKCJA TEKSTU
+    let extractedText = '';
     let fileType = 'document';
 
-    if (file.type === 'application/pdf') {
-      fileType = 'pdf';
-      extractedText = `PDF Document: ${originalFileName}`;
-    } else if (file.type.includes('sheet') || file.type.includes('excel')) {
-      fileType = 'excel';
-      extractedText = `Excel Document: ${originalFileName}`;
-    } else if (file.type === 'text/plain') {
-      fileType = 'txt';
-      try {
+    console.log('📄 Rozpoczynam ekstrakcję tekstu...');
+
+    try {
+      if (file.type === 'application/pdf') {
+        fileType = 'pdf';
+        extractedText = await extractTextFromPDF(fileBuffer);
+        console.log(`✅ Wyekstrahowano ${extractedText.length} znaków z PDF`);
+      } else if (file.type.includes('sheet') || file.type.includes('excel')) {
+        fileType = 'excel';
+        extractedText = await extractTextFromExcel(fileBuffer);
+        console.log(`✅ Wyekstrahowano ${extractedText.length} znaków z Excel`);
+      } else if (file.type === 'text/plain') {
+        fileType = 'txt';
         extractedText = fileBuffer.toString('utf-8');
-      } catch (error) {
-        console.warn('Nie udało się odczytać tekstu z pliku TXT');
-        extractedText = `Text Document: ${originalFileName}`;
+        console.log(`✅ Wyekstrahowano ${extractedText.length} znaków z TXT`);
+      } else if (file.type.includes('word')) {
+        fileType = 'word';
+        extractedText = await extractTextFromWord(fileBuffer);
+        console.log(`✅ Wyekstrahowano ${extractedText.length} znaków z Word`);
       }
-    } else if (file.type.includes('word')) {
-      fileType = 'word';
-      extractedText = `Word Document: ${originalFileName}`;
+
+      // Jeśli ekstrakcja się nie powiodła, użyj domyślnego tekstu
+      if (!extractedText || extractedText.length === 0) {
+        console.warn('⚠️ Ekstrakcja tekstu zwróciła pusty wynik');
+        extractedText = `Dokument: ${originalFileName}\n\nNie udało się wyekstrahować treści dokumentu.`;
+      }
+    } catch (extractError) {
+      console.error('❌ Błąd podczas ekstrakcji tekstu:', extractError);
+      extractedText = `Dokument: ${originalFileName}\n\nBłąd podczas ekstrakcji treści.`;
     }
 
     // Zapisz dokument w bazie danych
@@ -189,7 +247,7 @@ export async function POST(request: NextRequest) {
           filePath: `base64:${fileBase64}`, // Przechowujemy base64 zamiast ścieżki
           fileType: fileType,
           fileSize: file.size,
-          content: extractedText,
+          content: extractedText, // TERAZ ZAWIERA PRAWDZIWĄ TREŚĆ!
           categoryId: categoryId,
           uploadedBy: session.user.email,
           uploadedByName: session.user.name || session.user.email,
@@ -210,6 +268,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Dokument utworzony w bazie: ${document.id}`);
+    console.log(`📊 Długość wyekstrahowanej treści: ${extractedText.length} znaków`);
 
     return NextResponse.json({
       success: true,
@@ -222,7 +281,8 @@ export async function POST(request: NextRequest) {
         fileSize: document.fileSize,
         categoryName: document.category.name,
         uploadedBy: document.uploadedByName,
-        createdAt: document.createdAt
+        createdAt: document.createdAt,
+        contentLength: extractedText.length // Dodaj info o długości treści
       }
     });
 
