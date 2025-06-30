@@ -1,5 +1,5 @@
-// src/app/api/knowledge/documents/content/route.ts
-// DODAJ WIĘCEJ DEBUGOWANIA
+// app/api/knowledge/documents/content/route.ts
+// 🔥 NAPRAWIONA WERSJA - uproszczona i bardziej niezawodna
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -43,37 +43,56 @@ export async function GET(request: NextRequest) {
     
     if (ids.length === 0) {
       console.log("⚠️ Lista IDs jest pusta po filtrowaniu");
-      return NextResponse.json({ documents: [] });
+      return NextResponse.json({ 
+        success: true,
+        documents: [],
+        totalDocuments: 0,
+        totalContentLength: 0
+      });
     }
 
     console.log(`📄 Szukam ${ids.length} dokumentów w bazie danych...`);
 
-    // Pobierz dokumenty z pełną zawartością
+    // 🔥 UPROSZCZONE ZAPYTANIE - pobierz wszystko potrzebne za jednym razem
     const documents = await prisma.knowledgeDocument.findMany({
       where: {
         id: {
           in: ids
         }
       },
-      include: {
-        category: true
+      select: {
+        id: true,
+        title: true,
+        fileType: true,
+        content: true, // 🔥 Najważniejsze - zawartość dokumentu
+        originalFileName: true,
+        uploadedBy: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            isPublic: true,
+            password: true,
+            createdBy: true
+          }
+        }
       }
     });
 
     console.log(`📚 Znaleziono ${documents.length} dokumentów w bazie danych`);
     
-    // Debug: Wypisz informacje o każdym znalezionym dokumencie
-    documents.forEach((doc, index) => {
-      console.log(`   ${index + 1}. Dokument ${doc.id}:`);
-      console.log(`      - Tytuł: "${doc.title}"`);
-      console.log(`      - Kategoria: "${doc.category.name}" (${doc.category.isPublic ? 'publiczna' : 'prywatna'})`);
-      console.log(`      - Utworzony przez: ${doc.category.createdBy}`);
-      console.log(`      - Ma content: ${!!doc.content}`);
-      console.log(`      - Długość content: ${doc.content?.length || 0} znaków`);
-      console.log(`      - Ma hasło: ${!!doc.category.password}`);
-    });
+    if (documents.length === 0) {
+      console.log("⚠️ Nie znaleziono żadnych dokumentów dla podanych ID");
+      return NextResponse.json({
+        success: true,
+        documents: [],
+        totalDocuments: 0,
+        totalContentLength: 0,
+        warning: 'Nie znaleziono dokumentów dla podanych ID'
+      });
+    }
 
-    // Sprawdź dostęp do każdego dokumentu i przygotuj odpowiedź
+    // 🔥 UPROSZCZONA LOGIKA DOSTĘPU - mniej restrykcyjna na początek
     const accessibleDocuments = [];
     
     for (const doc of documents) {
@@ -81,55 +100,98 @@ export async function GET(request: NextRequest) {
       const isOwner = category.createdBy === session.user.email;
       const isPublic = category.isPublic;
 
-      console.log(`🔐 Sprawdzam dostęp do dokumentu ${doc.id}:`);
+      console.log(`🔐 Dokument ${doc.id} (${doc.title}):`);
+      console.log(`   - Kategoria: ${category.name} (${isPublic ? 'publiczna' : 'prywatna'})`);
       console.log(`   - isOwner: ${isOwner}`);
-      console.log(`   - isPublic: ${isPublic}`);
+      console.log(`   - Ma zawartość: ${!!doc.content} (${doc.content?.length || 0} znaków)`);
 
-      // Sprawdź podstawowy dostęp do kategorii
-      if (!isPublic && !isOwner) {
-        console.log(`❌ Brak dostępu do dokumentu ${doc.id} - prywatna kategoria, nie jesteś właścicielem`);
+      // 🔥 UPROSZCZONA LOGIKA - na początek pozwól na dostęp do publicznych kategorii
+      let hasAccess = false;
+      
+      if (isOwner) {
+        hasAccess = true;
+        console.log(`   ✅ Dostęp: właściciel kategorii`);
+      } else if (isPublic && !category.password) {
+        hasAccess = true;
+        console.log(`   ✅ Dostęp: publiczna kategoria bez hasła`);
+      } else if (isPublic && category.password) {
+        // TODO: Na razie pomiń hasła - będziemy to naprawiać osobno
+        hasAccess = false;
+        console.log(`   ⚠️ Pominięto: publiczna kategoria z hasłem (do naprawy)`);
+      } else {
+        hasAccess = false;
+        console.log(`   ❌ Brak dostępu: prywatna kategoria`);
+      }
+
+      if (!hasAccess) {
         continue;
       }
 
-      // TODO: Sprawdź hasło kategorii jeśli wymagane
-      if (category.password && !isOwner) {
-        console.log(`⚠️ Dokument ${doc.id} wymaga hasła, ale nie sprawdzam go na tym endpoincie`);
-        // Na razie pomijamy dokumenty chronione hasłem dla nie-właścicieli
-        // Możesz dodać obsługę hasła jeśli potrzebna
-        continue;
+      // 🔥 SPRAWDŹ CZY DOKUMENT MA ZAWARTOŚĆ
+      if (!doc.content || doc.content.trim().length === 0) {
+        console.log(`   ⚠️ PROBLEM: Dokument ${doc.id} nie ma zawartości lub jest pusta!`);
+        // Dodaj dokument z informacją o problemie
+        accessibleDocuments.push({
+          id: doc.id,
+          title: doc.title,
+          fileType: doc.fileType,
+          content: `BRAK ZAWARTOŚCI: Dokument "${doc.title}" nie ma wyekstraktowanej zawartości. Możliwe przyczyny: błąd podczas uploadu, PDF skanowany, lub problem z ekstrakcją tekstu.`,
+          contentLength: 0,
+          categoryName: category.name,
+          categoryId: category.id,
+          originalFileName: doc.originalFileName,
+          hasContentIssue: true
+        });
+      } else {
+        console.log(`   ✅ Dokument OK - dodaję do odpowiedzi`);
+        accessibleDocuments.push({
+          id: doc.id,
+          title: doc.title,
+          fileType: doc.fileType,
+          content: doc.content,
+          contentLength: doc.content.length,
+          categoryName: category.name,
+          categoryId: category.id,
+          originalFileName: doc.originalFileName,
+          hasContentIssue: false
+        });
       }
-
-      console.log(`✅ Dostęp do dokumentu ${doc.id} przyznany`);
-
-      accessibleDocuments.push({
-        id: doc.id,
-        title: doc.title,
-        fileType: doc.fileType,
-        content: doc.content || '', // 🔥 GŁÓWNE: Zwracamy zawartość
-        contentLength: (doc.content || '').length,
-        categoryName: doc.category.name,
-        categoryId: doc.category.id
-      });
     }
 
     console.log(`✅ Przygotowano ${accessibleDocuments.length} dostępnych dokumentów`);
     
-    // Debug: Wypisz informacje o dokumentach do zwrócenia
+    // 🔥 SZCZEGÓŁOWE LOGOWANIE WYNIKÓW
+    const totalContentLength = accessibleDocuments.reduce((sum, doc) => sum + doc.contentLength, 0);
+    const documentsWithContent = accessibleDocuments.filter(doc => !doc.hasContentIssue).length;
+    const documentsWithIssues = accessibleDocuments.filter(doc => doc.hasContentIssue).length;
+    
+    console.log(`📊 PODSUMOWANIE:`);
+    console.log(`   - Żądanych dokumentów: ${ids.length}`);
+    console.log(`   - Znalezionych w bazie: ${documents.length}`);
+    console.log(`   - Dostępnych dla użytkownika: ${accessibleDocuments.length}`);
+    console.log(`   - Z prawidłową zawartością: ${documentsWithContent}`);
+    console.log(`   - Z problemami zawartości: ${documentsWithIssues}`);
+    console.log(`   - Łączna długość zawartości: ${totalContentLength} znaków`);
+
+    // Wypisz pierwszy fragment zawartości dla debugowania
     accessibleDocuments.forEach((doc, index) => {
-      console.log(`   📄 ${index + 1}. "${doc.title}" (${doc.fileType}): ${doc.contentLength} znaków`);
-      if (doc.content) {
-        console.log(`      Początek treści: "${doc.content.substring(0, 100)}..."`);
+      if (doc.content && !doc.hasContentIssue) {
+        console.log(`📄 ${index + 1}. "${doc.title}": "${doc.content.substring(0, 100)}..."`);
       }
     });
-
-    const totalContentLength = accessibleDocuments.reduce((sum, doc) => sum + doc.contentLength, 0);
-    console.log(`📊 Łączna długość zawartości: ${totalContentLength} znaków`);
 
     const response = {
       success: true,
       documents: accessibleDocuments,
       totalDocuments: accessibleDocuments.length,
-      totalContentLength: totalContentLength
+      totalContentLength: totalContentLength,
+      stats: {
+        requested: ids.length,
+        found: documents.length,
+        accessible: accessibleDocuments.length,
+        withContent: documentsWithContent,
+        withIssues: documentsWithIssues
+      }
     };
 
     console.log("🔥 === END content endpoint SUCCESS ===");
@@ -142,6 +204,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(
       { 
+        success: false,
         error: 'Wystąpił błąd podczas pobierania zawartości dokumentów',
         details: error instanceof Error ? error.message : 'Nieznany błąd'
       },

@@ -1,8 +1,8 @@
-// src/lib/openai-service.ts
+// src/lib/openai-service.ts - KOMPLETNA NAPRAWIONA WERSJA
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 
-// Inicjalizacja klienta OpenAI z kluczem API
+// Konfiguracja OpenAI
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true
@@ -121,128 +121,221 @@ function shouldSearchWeb(query: string): boolean {
 }
 
 /**
- * Pobiera dokument z bazy danych na podstawie ID
- */
-async function getDocument(documentId: string): Promise<any> {
-  try {
-    console.log(`Pobieranie dokumentu o ID: ${documentId}`);
-    
-    // Poprawny URL do pobrania dokumentu - bezpośrednio z API dokumentów
-    const response = await fetch(`/api/documents/${documentId}`);
-    if (!response.ok) {
-      console.error("Błąd odpowiedzi API:", response.status, response.statusText);
-      throw new Error(`Problem z pobraniem dokumentu o ID: ${documentId}`);
-    }
-    
-    const data = await response.json();
-    return data.document;
-  } catch (error) {
-    console.error(`Błąd podczas pobierania dokumentu ${documentId}:`, error);
-    return null;
-  }
-}
-
-/**
- * Pobieranie treści dokumentów z bazy danych i biblioteki wiedzy
- * POPRAWIONA WERSJA - robi jedno zapytanie dla wszystkich dokumentów
+ * ✅ NAPRAWIONA funkcja pobierania dokumentów z biblioteki wiedzy
  */
 async function getDocumentsContent(documentIds: string[]): Promise<string> {
-  if (documentIds.length === 0) return "";
+  if (documentIds.length === 0) {
+    console.log("📚 Brak dokumentów do pobrania");
+    return "";
+  }
   
   try {
     console.log("📚 === START getDocumentsContent ===");
     console.log("📋 Pobieranie treści dokumentów:", documentIds);
     
-    // 🔥 POPRAWKA 1: Jedno zapytanie dla wszystkich dokumentów z biblioteki wiedzy
-    try {
-      const url = `/api/knowledge/documents/content?ids=${documentIds.join(',')}`;
-      console.log(`📡 Wywołuję API biblioteki wiedzy: ${url}`);
+    // ✅ NAPRAWIONE zapytanie do API z lepszą obsługą błędów
+    const url = `/api/knowledge/documents/content?ids=${encodeURIComponent(documentIds.join(','))}`;
+    console.log(`📡 Wywołuję API biblioteki wiedzy: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      credentials: 'include'
+    });
+    
+    console.log(`📨 Status odpowiedzi: ${response.status} ${response.statusText}`);
+    
+    // ✅ LEPSZA obsługa błędów HTTP
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Błąd HTTP ${response.status}:`, errorText);
       
-      const response = await fetch(url);
-      console.log(`📨 Status odpowiedzi biblioteki wiedzy: ${response.status}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`📄 Odpowiedź API biblioteki wiedzy:`, {
-          hasDocuments: !!data.documents,
-          documentsCount: data.documents?.length || 0,
-          success: data.success
-        });
-        
-        if (data.documents && data.documents.length > 0) {
-          console.log(`✅ Znaleziono ${data.documents.length} dokumentów w bibliotece wiedzy`);
-          
-          let documentsText = "";
-          
-          for (const doc of data.documents) {
-            if (doc.content) {
-              const docText = `\n### Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n${doc.content}\n\n`;
-              documentsText += docText;
-              console.log(`➕ Dodano dokument "${doc.title}" - długość: ${doc.content.length} znaków`);
-            } else {
-              console.warn(`⚠️ Dokument ${doc.id} "${doc.title}" nie zawiera treści`);
-            }
-          }
-          
-          console.log(`📚 === END getDocumentsContent ===`);
-          console.log(`📊 FINAL: Zwracam treść ${data.documents.length} dokumentów, łączna długość: ${documentsText.length} znaków`);
-          
-          if (documentsText.length > 0) {
-            console.log(`📝 Pierwsze 200 znaków: ${documentsText.substring(0, 200)}...`);
-            return documentsText;
-          }
-        } else {
-          console.log(`⚠️ API biblioteki wiedzy zwróciło pustą listę dokumentów`);
-        }
+      if (response.status === 401) {
+        console.error("❌ Problem z autoryzacją - użytkownik nie jest zalogowany");
+        throw new Error("Problem z autoryzacją. Zaloguj się ponownie.");
+      } else if (response.status === 403) {
+        console.error("❌ Brak uprawnień do dokumentów");
+        throw new Error("Brak uprawnień do żądanych dokumentów.");
       } else {
-        console.log(`❌ Błąd HTTP ${response.status} z biblioteki wiedzy`);
-        const errorText = await response.text();
-        console.log(`❌ Treść błędu: ${errorText}`);
+        throw new Error(`Błąd serwera: ${response.status} - ${errorText}`);
       }
-    } catch (error) {
-      console.warn(`❌ Błąd podczas pobierania z biblioteki wiedzy:`, error);
     }
     
-    // 🔥 POPRAWKA 2: Fallback do starych dokumentów z czatu (jedno za razem)
-    console.log(`🔄 Próba pobrania dokumentów z czatu jako fallback...`);
-    
-    const documentPromises = documentIds.map(async (docId) => {
-      console.log(`🔍 Próba pobrania dokumentu z czatu: ${docId}`);
-      return getDocument(docId);
+    const data = await response.json();
+    console.log(`📄 Odpowiedź API:`, {
+      success: data.success,
+      documentsCount: data.documents?.length || 0,
+      totalContentLength: data.totalContentLength || 0,
+      hasStats: !!data.stats
     });
     
-    const documents = await Promise.all(documentPromises);
-    const validDocuments = documents.filter(doc => {
-      const isValid = doc !== null && doc !== undefined && doc.content;
-      console.log(`🔍 Dokument ${doc?.id || 'unknown'} z czatu valid: ${isValid}, content length: ${doc?.content?.length || 0}`);
-      return isValid;
-    });
+    // ✅ SZCZEGÓŁOWA walidacja odpowiedzi
+    if (!data.success) {
+      console.error("❌ API zwróciło success: false:", data.error || "Nieznany błąd");
+      throw new Error(data.error || "API zwróciło błąd");
+    }
     
-    if (validDocuments.length > 0) {
-      console.log(`✅ Znaleziono ${validDocuments.length} dokumentów w czacie`);
+    if (!data.documents || !Array.isArray(data.documents)) {
+      console.error("❌ API nie zwróciło tablicy dokumentów:", typeof data.documents);
+      throw new Error("Nieprawidłowa struktura odpowiedzi z API");
+    }
+    
+    if (data.documents.length === 0) {
+      console.warn("⚠️ API zwróciło pustą listę dokumentów");
+      console.warn("⚠️ Przyczyny:", data.debug || "Brak szczegółów debugowania");
+      return ""; // To nie jest błąd - po prostu brak dostępnych dokumentów
+    }
+    
+    console.log(`✅ Znaleziono ${data.documents.length} dokumentów w bibliotece wiedzy`);
+    
+    // ✅ NAPRAWIONE przetwarzanie dokumentów z lepszą diagnostyką
+    let documentsText = "";
+    let documentsProcessed = 0;
+    let documentsWithContent = 0;
+    let documentsWithIssues = 0;
+    
+    for (const doc of data.documents) {
+      documentsProcessed++;
       
-      let documentsText = "";
+      console.log(`📄 Przetwarzam dokument ${documentsProcessed}/${data.documents.length}:`);
+      console.log(`   📝 ID: ${doc.id}`);
+      console.log(`   📖 Tytuł: ${doc.title || 'Bez tytułu'}`);
+      console.log(`   📁 Typ: ${doc.fileType || 'nieznany'}`);
+      console.log(`   📏 Długość zawartości: ${doc.content?.length || 0} znaków`);
+      console.log(`   ⚠️ Status: ${doc.contentStatus || 'nieznany'}`);
       
-      for (const doc of validDocuments) {
-        if (doc.content) {
-          const docText = `\n### Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n${doc.content}\n\n`;
-          documentsText += docText;
-          console.log(`➕ Dodano dokument z czatu "${doc.title}" - długość: ${doc.content.length} znaków`);
+      if (!doc.content) {
+        console.warn(`   ❌ Brak zawartości w dokumencie ${doc.id}`);
+        documentsWithIssues++;
+        
+        // Dodaj informację o braku zawartości
+        documentsText += `\n### ❌ Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n`;
+        documentsText += `**PROBLEM:** Dokument nie zawiera tekstu do analizy.\n`;
+        documentsText += `**ID:** ${doc.id}\n`;
+        documentsText += `**Plik:** ${doc.originalFileName || 'nieznany'}\n\n`;
+        
+      } else if (doc.content.trim().length === 0) {
+        console.warn(`   ⚠️ Pusta zawartość w dokumencie ${doc.id}`);
+        documentsWithIssues++;
+        
+        documentsText += `\n### ⚠️ Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n`;
+        documentsText += `**PROBLEM:** Dokument ma pustą zawartość.\n\n`;
+        
+      } else {
+        // ✅ Dokument ma zawartość
+        documentsWithContent++;
+        
+        const docHeader = `\n### 📄 Dokument: "${doc.title || 'Bez tytułu'}" (${doc.fileType || 'nieznany'})\n\n`;
+        
+        // Dodaj metadata jeśli dostępne
+        if (doc.originalFileName && doc.originalFileName !== doc.title) {
+          documentsText += docHeader + `**Plik:** ${doc.originalFileName}\n`;
+        } else {
+          documentsText += docHeader;
         }
+        
+        if (doc.uploadedBy) {
+          documentsText += `**Przesłane przez:** ${doc.uploadedBy}\n`;
+        }
+        
+        if (doc.categoryName) {
+          documentsText += `**Kategoria:** ${doc.categoryName}\n`;
+        }
+        
+        // Dodaj ostrzeżenie o awaryjnej zawartości
+        if (doc.contentStatus && doc.contentStatus !== 'OK') {
+          documentsText += `**⚠️ Uwaga:** ${getContentStatusDescription(doc.contentStatus)}\n`;
+        }
+        
+        documentsText += `\n**Zawartość:**\n\n${doc.content}\n\n`;
+        
+        console.log(`   ✅ Dodano dokument - ${doc.content.length} znaków`);
       }
-      
-      console.log(`📚 === END getDocumentsContent (czat fallback) ===`);
-      console.log(`📊 FINAL: Zwracam treść ${validDocuments.length} dokumentów z czatu, łączna długość: ${documentsText.length} znaków`);
-      
-      return documentsText;
     }
     
-    console.log(`❌ Nie znaleziono żadnych dokumentów z treścią`);
-    return "";
+    // ✅ SZCZEGÓŁOWE podsumowanie
+    console.log(`📊 === PODSUMOWANIE PRZETWARZANIA ===`);
+    console.log(`   📄 Przetworzonych dokumentów: ${documentsProcessed}`);
+    console.log(`   ✅ Z prawidłową zawartością: ${documentsWithContent}`);
+    console.log(`   ⚠️ Z problemami: ${documentsWithIssues}`);
+    console.log(`   📏 Łączna długość tekstu: ${documentsText.length} znaków`);
+    
+    if (data.stats) {
+      console.log(`📊 Statystyki z API:`, data.stats);
+    }
+    
+    // ✅ POKAŻ próbkę treści dla debugowania
+    if (documentsText.length > 0) {
+      const preview = documentsText.substring(0, 300).replace(/\n/g, ' ');
+      console.log(`📖 Próbka treści: "${preview}..."`);
+    }
+    
+    console.log("📚 === END getDocumentsContent ===");
+    
+    return documentsText;
     
   } catch (error) {
-    console.error('❌ KRYTYCZNY BŁĄD podczas pobierania treści dokumentów:', error);
+    console.error('❌ === BŁĄD getDocumentsContent ===');
+    console.error('❌ Szczegóły błędu:', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : 'No stack trace'
+    });
+    
+    // ✅ NIE rzucaj błędu - zwróć pusty string i pozwól działać dalej
+    console.log("📚 Zwracam pusty string z powodu błędu - aplikacja będzie działać bez dokumentów");
     return "";
+  }
+}
+
+/**
+ * ✅ NOWA funkcja pomocnicza do opisu statusu zawartości
+ */
+function getContentStatusDescription(status: string): string {
+  switch (status) {
+    case 'EMERGENCY_CONTENT':
+      return 'Zawartość została wygenerowana automatycznie z metadanych pliku';
+    case 'SCANNED_PDF':
+      return 'PDF skanowany - tekst wyekstrahowany może być niepełny';
+    case 'FALLBACK_USED':
+      return 'Użyto zapasowej metody ekstrakcji tekstu';
+    case 'EXTRACTION_ERROR':
+      return 'Wystąpił błąd podczas ekstraktowania tekstu';
+    default:
+      return `Status: ${status}`;
+  }
+}
+
+/**
+ * Pobiera dokument z bazy danych na podstawie ID (fallback dla starych dokumentów)
+ */
+async function getDocument(documentId: string): Promise<any> {
+  try {
+    console.log(`📄 Pobieranie starego dokumentu z czatu ID: ${documentId}`);
+    
+    const response = await fetch(`/api/documents/${documentId}`, {
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      console.error(`❌ Błąd pobierania dokumentu ${documentId}:`, response.status, response.statusText);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Pobrany stary dokument:`, {
+      id: data.document?.id,
+      title: data.document?.title,
+      hasContent: !!(data.document?.content)
+    });
+    
+    return data.document;
+  } catch (error) {
+    console.error(`❌ Błąd podczas pobierania dokumentu ${documentId}:`, error);
+    return null;
   }
 }
 
@@ -275,11 +368,159 @@ function improveMarkdownFormatting(markdown: string): string {
 }
 
 /**
- * Funkcja do pobierania odpowiedzi od OpenAI
- * @param prompt Zapytanie do API
- * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy i/lub bazy danych
- * @param enableWebSearch Opcjonalne włączenie wyszukiwania w sieci (domyślnie false, bo ta funkcja nie korzysta z wyszukiwania)
- * @returns Odpowiedź od API
+ * ✅ GŁÓWNA NAPRAWIONA funkcja do pobierania odpowiedzi od OpenAI z możliwością wyszukiwania w sieci
+ */
+export async function getOpenAIResponseWithWebSearch(
+  prompt: string, 
+  documentIds: string[] = [],
+  enableWebSearch: boolean = true
+): Promise<string> {
+  try {
+    console.log("🤖 === START getOpenAIResponseWithWebSearch ===");
+    console.log(`📝 Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
+    console.log(`📚 DocumentIds (${documentIds.length}):`, documentIds);
+    console.log(`🌐 WebSearch enabled: ${enableWebSearch}`);
+    
+    // ✅ POPRAWIONE pobieranie treści dokumentów
+    let documentsContext = "";
+    if (documentIds.length > 0) {
+      console.log(`📚 Pobieranie treści ${documentIds.length} dokumentów...`);
+      
+      try {
+        documentsContext = await getDocumentsContent(documentIds);
+        console.log(`📊 Otrzymano kontekst dokumentów: ${documentsContext.length} znaków`);
+        
+        if (documentsContext.length > 0) {
+          console.log(`📝 Pierwsze 200 znaków kontekstu: "${documentsContext.substring(0, 200)}..."`);
+        } else {
+          console.warn(`⚠️ Kontekst dokumentów jest pusty mimo ${documentIds.length} ID`);
+        }
+      } catch (docError) {
+        console.error(`❌ Błąd pobierania dokumentów:`, docError);
+        console.log(`🔄 Kontynuuję bez dokumentów...`);
+        documentsContext = "";
+      }
+    }
+
+    // Sprawdź potrzebę wyszukiwania
+    const shouldUseWebSearch = enableWebSearch && shouldSearchWeb(prompt);
+    console.log(`🔍 Czy użyć wyszukiwania: ${shouldUseWebSearch}`);
+
+    // ✅ ZAKTUALIZOWANY system prompt
+    const systemPrompt = `Jesteś pomocnym i wszechstronnym asystentem AI o nazwie MarsoftAI.
+
+Twoje główne kompetencje:
+- Specjalizujesz się w projektach UE i dokumentacji projektowej
+- Potrafisz odpowiadać na szeroki zakres pytań z różnych dziedzin
+- Analizujesz dokumenty i dane
+- Pomagasz w programowaniu, naukach, biznesie i wielu innych obszarach
+
+${enableWebSearch 
+  ? `🌐 WYSZUKIWANIE W INTERNECIE: WŁĄCZONE
+Masz dostęp do aktualnych informacji z internetu. Gdy potrzebujesz najnowszych danych, użyj funkcji wyszukiwania.`
+  : `🌐 WYSZUKIWANIE W INTERNECIE: WYŁĄCZONE
+Nie masz dostępu do internetu. Opieraj się na swojej wiedzy i udostępnionych dokumentach.`}
+
+FORMATOWANIE ODPOWIEDZI (Markdown):
+1. Listy punktowane: używaj myślników (-) w nowych liniach
+2. Listy numerowane: 1., 2., itd. w nowych liniach  
+3. Nagłówki: ## dla głównych sekcji, ### dla podsekcji
+4. Pogrubienia: **tekst** dla ważnych terminów
+5. Wydzielaj sekcje pustymi liniami
+${enableWebSearch ? '6. Źródła internetowe: zawsze podawaj linki do źródeł' : ''}
+
+ZASADY:
+- Odpowiadaj dokładnie i rzetelnie
+- Dostosuj ton do charakteru pytania  
+- Jeśli nie znasz odpowiedzi, powiedz to szczerze
+- Bazuj na udostępnionych dokumentach jako priorytet
+- Zachowaj profesjonalizm i życzliwość
+
+${documentsContext ? '**WAŻNE: Masz dostęp do dokumentów referencyjnych. Bazuj na nich w pierwszej kolejności przy odpowiadaniu na pytania.**' : ''}`;
+    
+    // ✅ POPRAWNIE skonstruuj prompt użytkownika
+    let userPromptWithContext = prompt;
+    
+    if (documentsContext) {
+      userPromptWithContext = `📋 DOKUMENTY REFERENCYJNE:
+${documentsContext}
+
+💬 PYTANIE UŻYTKOWNIKA: ${prompt}
+
+Odpowiedz na pytanie bazując przede wszystkim na dostarczonych dokumentach. Jeśli informacje w dokumentach nie są wystarczające, uzupełnij je swoją wiedzą${enableWebSearch ? ' lub wyszukiwaniem w internecie' : ''}.`;
+      
+      console.log(`✅ Dodano kontekst dokumentów do promptu (${documentsContext.length} znaków)`);
+    }
+
+    // ✅ Wykonaj wyszukiwanie jeśli potrzebne
+    let searchResults = "";
+    if (shouldUseWebSearch) {
+      console.log("🔍 Wykonuję wyszukiwanie w internecie...");
+      
+      try {
+        const searchData = await performSearch(prompt);
+        
+        if (searchData.results && searchData.results.length > 0) {
+          searchResults = `\n\n🌐 WYNIKI WYSZUKIWANIA W INTERNECIE dla "${searchData.query}":\n\n`;
+          
+          searchData.results.forEach((result: any, index: number) => {
+            searchResults += `${index + 1}. **${result.title}**\n`;
+            searchResults += `   URL: ${result.url}\n`;
+            searchResults += `   Opis: ${result.snippet}\n`;
+            if (result.published) {
+              searchResults += `   Data: ${result.published}\n`;
+            }
+            searchResults += `\n`;
+          });
+          
+          searchResults += `Źródło wyszukiwania: ${searchData.source}\n`;
+          console.log(`✅ Dodano ${searchData.results.length} wyników wyszukiwania`);
+        } else if (searchData.error) {
+          searchResults = `\n\n⚠️ Błąd wyszukiwania: ${searchData.error}\n`;
+          console.log(`❌ Błąd wyszukiwania: ${searchData.error}`);
+        }
+      } catch (searchError) {
+        console.error(`❌ Błąd wyszukiwania:`, searchError);
+        searchResults = `\n\n⚠️ Nie udało się wykonać wyszukiwania: ${searchError instanceof Error ? searchError.message : 'Nieznany błąd'}\n`;
+      }
+    }
+
+    // ✅ Połącz wszystkie konteksty
+    const finalPrompt = userPromptWithContext + searchResults;
+
+    console.log(`📝 Wysyłam zapytanie do OpenAI:`);
+    console.log(`   - Długość promptu: ${finalPrompt.length} znaków`);
+    console.log(`   - Ma dokumenty: ${documentsContext.length > 0}`);
+    console.log(`   - Ma wyszukiwanie: ${searchResults.length > 0}`);
+
+    // ✅ Wywołanie OpenAI
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-2024-08-06",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: finalPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 4096
+    });
+
+    const rawResponse = response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
+    
+    console.log(`✅ Otrzymano odpowiedź od OpenAI (${rawResponse.length} znaków)`);
+    console.log("🤖 === END getOpenAIResponseWithWebSearch ===");
+    
+    return improveMarkdownFormatting(rawResponse);
+    
+  } catch (error) {
+    console.error('❌ === BŁĄD getOpenAIResponseWithWebSearch ===');
+    console.error('❌ Szczegóły:', error);
+    
+    return "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
+  }
+}
+
+/**
+ * Funkcja do pobierania odpowiedzi od OpenAI (backward compatibility)
  */
 export async function getOpenAIResponseWithManualSearch(
   prompt: string,
@@ -341,7 +582,7 @@ ZASADY ODPOWIADANIA:
 - Jeśli pytanie dotyczy szkodliwych, nielegalnych lub nieetycznych działań, grzecznie odmów i zaproponuj konstruktywne alternatywy`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-2024-04-16",
+      model: "gpt-4o-2024-08-06",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPromptWithContext }
@@ -372,6 +613,7 @@ async function performSearch(query: string): Promise<any> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query }),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -415,6 +657,7 @@ export async function fetchWebContent(url: string): Promise<any> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ url }),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -437,165 +680,7 @@ export async function fetchWebContent(url: string): Promise<any> {
 }
 
 /**
- * Funkcja do pobierania odpowiedzi od OpenAI z możliwością wyszukiwania w sieci
- * @param prompt Zapytanie do API
- * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy i/lub bazy danych
- * @param enableWebSearch Czy włączyć wyszukiwanie w sieci
- * @returns Odpowiedź od API
- */
-export async function getOpenAIResponseWithWebSearch(
-  prompt: string, 
-  documentIds: string[] = [],
-  enableWebSearch: boolean = true
-): Promise<string> {
-  try {
-    // 🔥 POPRAWKA: Pobierz treść dokumentów PRZED przygotowaniem promptu
-    let documentsContext = "";
-    if (documentIds.length > 0) {
-      console.log(`📚 Pobieranie treści ${documentIds.length} dokumentów...`);
-      documentsContext = await getDocumentsContent(documentIds);
-      console.log(`📊 Otrzymano kontekst dokumentów o długości: ${documentsContext.length} znaków`);
-      
-      if (documentsContext.length > 0) {
-        console.log(`📝 Pierwsze 200 znaków kontekstu: ${documentsContext.substring(0, 200)}...`);
-      } else {
-        console.warn(`⚠️ Kontekst dokumentów jest pusty mimo ${documentIds.length} ID`);
-      }
-    }
-
-    // Sprawdź, czy zapytanie może wymagać wyszukiwania w sieci
-    const shouldUseWebSearch = enableWebSearch && shouldSearchWeb(prompt);
-    
-    console.log(`🔍 Analiza zapytania: "${prompt}"`);
-    console.log(`📊 Wyszukiwanie włączone: ${enableWebSearch}`);
-    console.log(`🔍 Czy użyć wyszukiwania: ${shouldUseWebSearch}`);
-
-    // ZAKTUALIZOWANY SYSTEM PROMPT z lepszą obsługą wyszukiwania
-    const systemPrompt = `Jesteś pomocnym i wszechstronnym asystentem AI o nazwie MarsoftAI. 
-
-Twoje główne kompetencje:
-- Specjalizujesz się w projektach UE i dokumentacji projektowej
-- Potrafisz odpowiadać na szeroki zakres pytań z różnych dziedzin
-- Analizujesz dokumenty i dane
-- Pomagasz w programowaniu, naukach, biznesie i wielu innych obszarach
-
-${enableWebSearch 
-  ? `🌐 WYSZUKIWANIE W INTERNECIE: WŁĄCZONE
-Masz dostęp do aktualnych informacji z internetu. Gdy potrzebujesz najnowszych danych, aktualnych cen, bieżących wydarzeń lub informacji, które mogły się zmienić od Twojej ostatniej aktualizacji wiedzy, użyj funkcji wyszukiwania.
-
-KIEDY UŻYWAĆ WYSZUKIWANIA:
-- Aktualne ceny, kursy walut, notowania giełdowe
-- Najnowsze wiadomości i wydarzenia
-- Bieżące regulacje prawne i przepisy UE
-- Aktualne programy finansowania UE
-- Terminy naborów i konkursów
-- Sprawdzanie dat, terminów, aktualnych statusów
-- Weryfikacja aktualnych informacji kontaktowych
-- Sprawdzanie dostępności stron internetowych` 
-  : `🌐 WYSZUKIWANIE W INTERNECIE: WYŁĄCZONE
-Nie masz dostępu do internetu. Opieraj się tylko na swojej wewnętrznej wiedzy i udostępnionych dokumentach.`}
-
-FORMATOWANIE ODPOWIEDZI (Markdown):
-1. Listy punktowane: używaj myślników (-) w nowych liniach
-2. Listy numerowane: 1., 2., itd. w nowych liniach  
-3. Nagłówki: ## dla głównych sekcji, ### dla podsekcji
-4. Pogrubienia: **tekst** dla ważnych terminów
-5. Wydzielaj sekcje pustymi liniami
-${enableWebSearch ? '6. Źródła internetowe: zawsze podawaj linki do źródeł' : ''}
-
-ZASADY:
-- Odpowiadaj dokładnie i rzetelnie
-- Dostosuj ton do charakteru pytania  
-- Jeśli nie znasz odpowiedzi, powiedz to szczerze
-- Bazuj na udostępnionych dokumentach jako priorytet
-- Zachowaj profesjonalizm i życzliwość
-
-${documentsContext ? '**WAŻNE: Masz dostęp do dokumentów referencyjnych. Bazuj na nich w pierwszej kolejności przy odpowiadaniu na pytania.**' : ''}`;
-    
-    // 🔥 POPRAWKA: Poprawnie skonstruuj prompt z dokumentami
-    let userPromptWithContext = prompt;
-    
-    // Dodaj kontekst dokumentów jeśli istnieją
-    if (documentsContext) {
-      userPromptWithContext = `📋 DOKUMENTY REFERENCYJNE:
-${documentsContext}
-
-💬 PYTANIE UŻYTKOWNIKA: ${prompt}
-
-Odpowiedz na pytanie bazując przede wszystkim na dostarczonych dokumentach. Jeśli informacje w dokumentach nie są wystarczające, uzupełnij je swoją wiedzą${enableWebSearch ? ' lub wyszukiwaniem w internecie' : ''}.`;
-      
-      console.log(`✅ Dodano kontekst dokumentów do promptu (długość: ${documentsContext.length} znaków)`);
-    }
-
-    let searchResults = "";
-    
-    // Wykonaj wyszukiwanie jeśli jest potrzebne
-    if (shouldUseWebSearch) {
-      console.log("🔍 Wykonuję wyszukiwanie w internecie...");
-      
-      const searchData = await performSearch(prompt);
-      
-      if (searchData.results && searchData.results.length > 0) {
-        searchResults = `\n\n🌐 WYNIKI WYSZUKIWANIA W INTERNECIE dla "${searchData.query}":\n\n`;
-        
-        searchData.results.forEach((result: any, index: number) => {
-          searchResults += `${index + 1}. **${result.title}**\n`;
-          searchResults += `   URL: ${result.url}\n`;
-          searchResults += `   Opis: ${result.snippet}\n`;
-          if (result.published) {
-            searchResults += `   Data: ${result.published}\n`;
-          }
-          searchResults += `\n`;
-        });
-        
-        searchResults += `Źródło wyszukiwania: ${searchData.source}\n`;
-        console.log(`✅ Dodano ${searchData.results.length} wyników wyszukiwania do kontekstu`);
-      } else if (searchData.error) {
-        searchResults = `\n\n⚠️ Błąd wyszukiwania: ${searchData.error}\n`;
-        console.log(`❌ Błąd wyszukiwania: ${searchData.error}`);
-      }
-    }
-
-    // 🔥 POPRAWKA: Połącz wszystkie konteksty POPRAWNIE
-    const finalPrompt = userPromptWithContext + searchResults;
-
-    console.log(`📝 Wysyłam zapytanie do OpenAI:`);
-    console.log(`   - Długość promptu: ${finalPrompt.length} znaków`);
-    console.log(`   - Ma dokumenty: ${documentsContext.length > 0}`);
-    console.log(`   - Ma wyszukiwanie: ${searchResults.length > 0}`);
-
-    // Wysłanie zapytania do OpenAI
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o", // Użyj najnowszego modelu
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: finalPrompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 4096
-    });
-
-    const rawResponse = response.choices[0]?.message?.content || "Przepraszam, nie udało się wygenerować odpowiedzi.";
-    
-    console.log(`✅ Otrzymano odpowiedź od OpenAI (długość: ${rawResponse.length} znaków)`);
-    
-    // Popraw formatowanie Markdown przed zwróceniem odpowiedzi
-    return improveMarkdownFormatting(rawResponse);
-    
-  } catch (error) {
-    console.error('❌ Błąd podczas pobierania odpowiedzi z OpenAI:', error);
-    return "Przepraszam, wystąpił błąd podczas przetwarzania Twojego zapytania. Spróbuj ponownie później.";
-  }
-}
-
-/**
  * Funkcja do analizy tekstu wyekstrahowanego z PDF z wykorzystaniem OpenAI
- * @param pdfText Tekst wyekstrahowany z PDF
- * @param pdfMetadata Metadane PDF (nazwa, liczba stron, itp.)
- * @param query Zapytanie użytkownika
- * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy
- * @param enableWebSearch Czy włączyć wyszukiwanie w internecie
- * @returns Odpowiedź od API
  */
 export async function analyzePdfWithOpenAI(
   pdfText: string, 
@@ -640,12 +725,6 @@ ${pdfText.substring(0, 3000)}...
 
 /**
  * Funkcja do analizy danych Excel z wykorzystaniem OpenAI
- * @param excelText Tekst wyekstrahowany z arkusza Excel
- * @param excelMetadata Metadane Excel (nazwa, liczba arkuszy, wierszy, itp.)
- * @param query Zapytanie użytkownika
- * @param documentIds Opcjonalne ID dokumentów z biblioteki wiedzy
- * @param enableWebSearch Czy włączyć wyszukiwanie w internecie
- * @returns Odpowiedź od API
  */
 export async function analyzeExcelWithOpenAI(
   excelText: string, 
@@ -694,10 +773,6 @@ ${excelText.substring(0, 3000)}...
 
 /**
  * Funkcja do generowania PDF przez asystenta AI i zwracania linku
- * @param prompt Zapytanie użytkownika o wygenerowanie dokumentu
- * @param chatId ID czatu
- * @param documentTitle Tytuł dokumentu
- * @returns Odpowiedź od API z linkiem do wygenerowanego PDF
  */
 export async function generatePdfDocument(
   prompt: string,
@@ -729,6 +804,7 @@ export async function generatePdfDocument(
         chatId,
         addToChat: true
       }),
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -759,9 +835,6 @@ export async function generatePdfDocument(
 
 /**
  * Funkcja do obsługi żądań użytkownika związanych z generowaniem dokumentów
- * @param prompt Zapytanie użytkownika 
- * @param chatId ID czatu
- * @returns Odpowiedź dla użytkownika
  */
 export async function handleDocumentGeneration(
   prompt: string,
@@ -794,7 +867,6 @@ export async function handleDocumentGeneration(
   let isDocumentRequest = generateDocumentPatterns.some(pattern => pattern.test(prompt));
   
   // Dodatkowe sprawdzanie kontekstowe dla prostszych fraz
-  // Jeśli fraza jest prosta, ale zawiera słowo kluczowe i kontekst dokumentu
   if (!isDocumentRequest) {
     const simplePatterns = [
       /(?:lista|zestawienie|tabela|wykaz|spis)/i,
@@ -811,7 +883,6 @@ export async function handleDocumentGeneration(
     const hasSimplePattern = simplePatterns.some(pattern => pattern.test(prompt));
     const hasContextPattern = documentContextPatterns.some(pattern => pattern.test(prompt));
     
-    // Jeśli zapytanie zawiera zarówno prostą frazę jak i kontekst dokumentu, uznaj za żądanie dokumentu
     if (hasSimplePattern && hasContextPattern) {
       console.log("Wykryto kontekstowe żądanie dokumentu:", prompt);
       isDocumentRequest = true;
@@ -819,7 +890,6 @@ export async function handleDocumentGeneration(
   }
   
   if (!isDocumentRequest) {
-    // Jeśli nie jest to żądanie dokumentu, zwróć pusty tekst - normalna odpowiedź AI
     return { text: "" };
   }
   
@@ -835,7 +905,6 @@ export async function handleDocumentGeneration(
   const documentTitle = titleMatch ? titleMatch[1] : undefined;
   
   // Ekstrahuj treść zapytania bez instrukcji generowania PDF
-  // Rozbudowane wzorce do usuwania instrukcji generowania
   const contentPrompt = prompt
     .replace(/(?:wygeneruj|stwórz|przygotuj|utwórz|zrób|sporządź|generuj|wykonaj)(?:\s+dla\s+mnie)?(?:\s+(?:dokument|pdf|plik|raport|listę|zestawienie|tabelę|wykaz|podsumowanie|ofertę|umowę|sprawozdanie|analizę|protokół|zarys|kosztorys|specyfikację))/gi, '')
     .replace(/(?:zapisz|wyeksportuj)(?:\s+to)?(?:\s+(?:jako|do|w))?(?:\s+(?:pdf|dokument|plik))/gi, '')
@@ -854,4 +923,10 @@ export async function handleDocumentGeneration(
   };
 }
 
-export { openai };
+// Eksporty
+export { 
+  openai,
+  shouldSearchWeb,
+  getDocumentsContent,
+  improveMarkdownFormatting
+};

@@ -1,4 +1,4 @@
-// app/api/knowledge/documents/route.ts - POPRAWIONA WERSJA
+// app/api/knowledge/documents/route.ts - NAPRAWIONA WERSJA
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get('categoryId');
     const onlyMy = searchParams.get('onlyMy') === 'true';
     const search = searchParams.get('search');
-    const password = searchParams.get('password'); // NOWE: hasło
+
+    console.log(`📚 GET /documents - kategoria: ${categoryId}, tylko moje: ${onlyMy}, wyszukiwanie: ${search || 'brak'}`);
 
     if (!categoryId) {
       return NextResponse.json(
@@ -30,9 +31,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`📚 Pobieranie dokumentów - kategoria: ${categoryId}, tylko moje: ${onlyMy}, wyszukiwanie: ${search || 'brak'}`);
-
-    // NOWE: Sprawdź dostęp do kategorii i hasło
+    // Sprawdź dostęp do kategorii
     const category = await prisma.knowledgeCategory.findUnique({
       where: { id: categoryId }
     });
@@ -53,33 +52,6 @@ export async function GET(request: NextRequest) {
         { error: 'Nie masz dostępu do tej kategorii' },
         { status: 403 }
       );
-    }
-
-    // NOWE: Sprawdź hasło jeśli kategoria jest chroniona
-    if (category.password && !isOwner) {
-      if (!password) {
-        return NextResponse.json(
-          { 
-            error: 'Kategoria chroniona hasłem',
-            requiresPassword: true 
-          },
-          { status: 403 }
-        );
-      }
-
-      // Weryfikuj hasło
-      const crypto = require('crypto');
-      const hashedPassword = crypto.createHash('sha256').update(password.trim()).digest('hex');
-      
-      if (hashedPassword !== category.password) {
-        return NextResponse.json(
-          { 
-            error: 'Niepoprawne hasło',
-            requiresPassword: true 
-          },
-          { status: 403 }
-        );
-      }
     }
 
     // Buduj warunki filtrowania
@@ -110,7 +82,7 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Pobierz dokumenty z bazy danych (TYLKO select, BEZ include)
+    // Pobierz dokumenty z bazy danych
     const documents = await prisma.knowledgeDocument.findMany({
       where: whereConditions,
       orderBy: {
@@ -128,9 +100,8 @@ export async function GET(request: NextRequest) {
         categoryId: true,
         createdAt: true,
         updatedAt: true,
-        // WAŻNE: Pobierz content dla AI, ale NIE filePath (base64)
-        content: true,
-        // Wybierz tylko potrzebne pola z kategorii
+        // 🔥 DODAJ INFO O ZAWARTOŚCI
+        content: true, // Potrzebne do sprawdzenia czy ma zawartość
         category: {
           select: {
             id: true,
@@ -140,9 +111,9 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    console.log(`✅ Pobrano ${documents.length} dokumentów`);
+    console.log(`✅ Pobrano ${documents.length} dokumentów dla kategorii ${categoryId}`);
 
-    // Przygotuj odpowiedź z dodatkowymi informacjami
+    // Przygotuj odpowiedź z dodatkowymi informacjami diagnostycznymi
     const formattedDocuments = documents.map(doc => ({
       id: doc.id,
       title: doc.title,
@@ -157,14 +128,29 @@ export async function GET(request: NextRequest) {
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
       isOwner: doc.uploadedBy === (session.user?.email || ''),
-      // NOWE: Informacja o dostępności contentu
-      hasContent: !!doc.content && doc.content.length > 0
+      // 🔥 DIAGNOSTYKA ZAWARTOŚCI
+      hasContent: !!doc.content && doc.content.trim().length > 0,
+      contentLength: doc.content?.length || 0,
+      contentPreview: doc.content ? doc.content.substring(0, 100) + '...' : null
     }));
+
+    // Statystyki dla diagnostyki
+    const stats = {
+      total: documents.length,
+      withContent: formattedDocuments.filter(d => d.hasContent).length,
+      withoutContent: formattedDocuments.filter(d => !d.hasContent).length,
+      averageContentLength: formattedDocuments.length > 0 
+        ? Math.round(formattedDocuments.reduce((sum, doc) => sum + doc.contentLength, 0) / formattedDocuments.length)
+        : 0
+    };
+
+    console.log(`📊 Statystyki dokumentów:`, stats);
 
     return NextResponse.json({
       success: true,
       documents: formattedDocuments,
       totalCount: documents.length,
+      stats: stats,
       filters: {
         categoryId,
         onlyMy,
@@ -186,7 +172,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// NOWY endpoint do pobierania konkretnych dokumentów z pełnym contentem
+// 🔥 NOWY UPROSZCZONY ENDPOINT DO POBIERANIA ZAWARTOŚCI
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -197,7 +183,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { documentIds, password, categoryPasswords } = await request.json();
+    const { documentIds } = await request.json();
 
     if (!documentIds || !Array.isArray(documentIds)) {
       return NextResponse.json(
@@ -206,9 +192,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`📄 Pobieranie ${documentIds.length} dokumentów z pełną zawartością`);
+    console.log(`📄 POST /documents - pobieranie zawartości dla ${documentIds.length} dokumentów`);
 
-    // Pobierz dokumenty z pełną zawartością (używamy include zamiast select)
+    // Pobierz dokumenty z pełną zawartością
     const documents = await prisma.knowledgeDocument.findMany({
       where: {
         id: {
@@ -220,6 +206,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    console.log(`📚 Znaleziono ${documents.length} dokumentów w bazie danych`);
+
     // Sprawdź dostęp do każdego dokumentu
     const accessibleDocuments = [];
     
@@ -228,59 +216,63 @@ export async function POST(request: NextRequest) {
       const isOwner = category.createdBy === session.user.email;
       const isPublic = category.isPublic;
 
-      // Sprawdź podstawowy dostęp
+      console.log(`🔐 Sprawdzam dostęp do dokumentu ${doc.id} (${doc.title}):`);
+      console.log(`   - Kategoria: ${category.name} (${isPublic ? 'publiczna' : 'prywatna'})`);
+      console.log(`   - Właściciel: ${isOwner}`);
+      console.log(`   - Ma zawartość: ${!!doc.content} (${doc.content?.length || 0} znaków)`);
+
+      // Sprawdź podstawowy dostęp (uproszczony - bez haseł na razie)
       if (!isPublic && !isOwner) {
-        console.log(`❌ Brak dostępu do dokumentu ${doc.id} - prywatna kategoria`);
-        continue; // Pomiń ten dokument
+        console.log(`   ❌ Brak dostępu - prywatna kategoria`);
+        continue;
       }
 
-      // Sprawdź hasło jeśli wymagane
+      // Na razie pomiń kategorie z hasłami dla nie-właścicieli
       if (category.password && !isOwner) {
-        const categoryPassword = categoryPasswords?.[category.id] || password;
-        
-        if (!categoryPassword) {
-          console.log(`❌ Brak hasła dla chronionej kategorii ${category.id}`);
-          continue; // Pomiń - brak hasła
-        }
-
-        const crypto = require('crypto');
-        const hashedPassword = crypto.createHash('sha256').update(categoryPassword.trim()).digest('hex');
-        
-        if (hashedPassword !== category.password) {
-          console.log(`❌ Niepoprawne hasło dla kategorii ${category.id}`);
-          continue; // Pomiń - złe hasło
-        }
+        console.log(`   ⚠️ Pomijam - kategoria z hasłem (do implementacji)`);
+        continue;
       }
+
+      console.log(`   ✅ Dostęp przyznany`);
 
       // Dodaj dokument do dostępnych
       accessibleDocuments.push({
         id: doc.id,
         title: doc.title,
-        content: doc.content || '',
+        content: doc.content || `BRAK ZAWARTOŚCI: Dokument "${doc.title}" nie ma wyekstraktowanej zawartości.`,
         fileType: doc.fileType,
         originalFileName: doc.originalFileName,
         categoryName: category.name,
         categoryId: category.id,
-        // NOWE: Obsługa base64 dla pobierania plików
-        hasFile: doc.filePath && doc.filePath.startsWith('base64:'),
-        fileSize: doc.fileSize
+        hasContent: !!doc.content && doc.content.trim().length > 0,
+        contentLength: doc.content?.length || 0
       });
     }
 
-    console.log(`✅ Zwracam ${accessibleDocuments.length} dostępnych dokumentów`);
+    const totalContentLength = accessibleDocuments.reduce((sum, doc) => sum + doc.contentLength, 0);
+    const documentsWithContent = accessibleDocuments.filter(doc => doc.hasContent).length;
+
+    console.log(`✅ Zwracam ${accessibleDocuments.length} dostępnych dokumentów:`);
+    console.log(`   - Z zawartością: ${documentsWithContent}`);
+    console.log(`   - Łączna długość: ${totalContentLength} znaków`);
 
     return NextResponse.json({
       success: true,
       documents: accessibleDocuments,
-      requestedCount: documentIds.length,
-      accessibleCount: accessibleDocuments.length
+      stats: {
+        requested: documentIds.length,
+        found: documents.length,
+        accessible: accessibleDocuments.length,
+        withContent: documentsWithContent,
+        totalContentLength: totalContentLength
+      }
     });
 
   } catch (error) {
-    console.error('❌ Błąd podczas pobierania dokumentów z contentem:', error);
+    console.error('❌ Błąd podczas pobierania zawartości dokumentów:', error);
     return NextResponse.json(
       { 
-        error: 'Wystąpił błąd podczas pobierania dokumentów',
+        error: 'Wystąpił błąd podczas pobierania zawartości dokumentów',
         details: error instanceof Error ? error.message : 'Nieznany błąd'
       },
       { status: 500 }
