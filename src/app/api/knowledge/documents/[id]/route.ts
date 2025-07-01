@@ -59,13 +59,16 @@ export async function DELETE(
       );
     }
 
-    // Usuń plik z dysku
-    try {
-      await unlink(document.filePath);
-      console.log(`💾 Usunięto plik z dysku: ${document.filePath}`);
-    } catch (fileError) {
-      console.warn('Nie udało się usunąć pliku z dysku:', fileError);
-      // Kontynuuj usuwanie z bazy danych nawet jeśli plik nie został usunięty
+    // Usuń plik z dysku tylko jeśli filePath to fizyczna ścieżka
+    if (document.filePath && !document.filePath.startsWith('base64:')) {
+      try {
+        await unlink(document.filePath);
+        console.log(`💾 Usunięto plik z dysku: ${document.filePath}`);
+      } catch (fileError) {
+        console.warn('Nie udało się usunąć pliku z dysku:', fileError);
+      }
+    } else {
+      console.log('🧠 Pominięto usuwanie pliku — dokument trzymany w base64');
     }
 
     // Usuń dokument z bazy danych
