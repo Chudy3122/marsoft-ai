@@ -1419,7 +1419,7 @@ const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
               </span>
             </button>
             */}           
-            {/* Przycisk Admin */}
+            {/* 🔥 NAPRAWIONY PRZYCISK UŻYTKOWNIKA */}
             <button
               onClick={() => setShowUserMenu(!showUserMenu)} 
               style={{ 
@@ -1450,14 +1450,30 @@ const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
                 fontSize: '14px',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
               }}>
-                A
+                {/* 🔥 NAPRAWIONE: Pobierz inicjał z sesji */}
+                {session?.user?.name?.charAt(0).toUpperCase() || 
+                 session?.user?.email?.charAt(0).toUpperCase() || 'U'}
               </div>
               <span style={{ 
                 color: '#4b5563', 
                 fontWeight: 400,
                 fontSize: '14px'
               }}>
-                Admin
+                {/* 🔥 NAPRAWIONE: Pobierz nazwę z sesji */}
+                {session?.user?.name || 
+                 session?.user?.email?.split('@')[0] || 
+                 'Użytkownik'}
+                {/* Dodaj wskaźnik roli jeśli admin */}
+                {session?.user?.role === 'admin' && (
+                  <span style={{ 
+                    marginLeft: '4px',
+                    fontSize: '12px',
+                    color: '#059669',
+                    fontWeight: 500
+                  }}>
+                    (Admin)
+                  </span>
+                )}
               </span>
             </button>
             
