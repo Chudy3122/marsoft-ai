@@ -8,16 +8,17 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(uuid())
-  name             String?
-  email            String   @unique
-  password         String
-  role             String   @default("user")
-  webSearchEnabled Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  chats            Chat[]
-  projects         Project[] // Dodaj tę linię
+  id                       String    @id @default(uuid())
+  name                     String?
+  email                    String    @unique
+  password                 String
+  role                     String    @default("user")
+  webSearchEnabled         Boolean   @default(true)
+  extendedReasoningEnabled Boolean   @default(false)  // 👈 DODAJ TĘ LINIĘ
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  chats                    Chat[]
+  projects                 Project[]
 }
 
 model Chat {
@@ -34,11 +35,13 @@ model Chat {
 
 model Message {
   id        String   @id @default(uuid())
-  content   String @db.Text 
+  content   String   @db.Text 
   role      String
   createdAt DateTime @default(now())
   chatId    String
   chat      Chat     @relation(fields: [chatId], references: [id])
+  metadata  Json?    @default("{}")
+  reasoning Json?    // 👈 DODAJ TĘ LINIĘ
 }
 
 model Document {

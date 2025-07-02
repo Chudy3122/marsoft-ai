@@ -51,6 +51,15 @@ export async function GET(
         },
         orderBy: {
           createdAt: 'asc'
+        },
+        select: {  // 👈 DODAJ select żeby pobrać wszystkie pola
+          id: true,
+          content: true,
+          role: true,
+          createdAt: true,
+          chatId: true,
+          metadata: true,  // 👈 DODAJ
+          reasoning: true  // 👈 DODAJ
         }
       });
       
@@ -111,7 +120,7 @@ export async function POST(
       return NextResponse.json({ error: 'Błąd parsowania danych wiadomości' }, { status: 400 });
     }
     
-    const { content, role } = messageData;
+    const { content, role, metadata, reasoning } = messageData; // 👈 DODAJ reasoning
     
     if (!content || !role) {
       return NextResponse.json({ error: 'Brakuje treści lub roli wiadomości' }, { status: 400 });
@@ -122,7 +131,9 @@ export async function POST(
       data: {
         content,
         role,
-        chatId
+        chatId,
+        metadata: metadata || {}, // 👈 DODAJ metadata
+        reasoning: reasoning || null // 👈 DODAJ reasoning
       }
     });
 

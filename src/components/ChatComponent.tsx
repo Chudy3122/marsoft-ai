@@ -17,6 +17,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { handleDocumentGeneration } from '@/lib/openai-service';
 import PdfDocumentEmbed from '@/components/PdfDocumentEmbed';
+import ReasoningDisplay from '@/components/ReasoningDisplay';
+import { 
+  getOpenAIResponseWithExtendedReasoning,
+  analyzePdfWithExtendedReasoning,
+  analyzeExcelWithExtendedReasoning,
+  type ExtendedResponse,
+  type ReasoningStep
+} from '@/lib/openai-service-extended';
 
 // Definicja typów
 interface Message {
@@ -29,6 +37,10 @@ interface Message {
 interface ExtendedMessage extends Message {
   pdfUrl?: string;
   documentId?: string;
+  reasoning?: {  // 👈 DODAJ TĘ CZĘŚĆ
+    steps: ReasoningStep[];
+    finalAnswer: string;
+  };
 }
 
 interface Chat {
@@ -68,6 +80,7 @@ export default function ChatComponent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [detectionResults, setDetectionResults] = useState<any>(null);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
+const [extendedReasoningEnabled, setExtendedReasoningEnabled] = useState(false);
 
   // Pobieranie historii czatów
   useEffect(() => {
@@ -100,8 +113,8 @@ export default function ChatComponent() {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
-            // Jeśli ustawienie istnieje w bazie, użyj go, w przeciwnym razie zachowaj domyślne false
             setWebSearchEnabled(data.webSearchEnabled !== undefined ? data.webSearchEnabled : false);
+            setExtendedReasoningEnabled(data.extendedReasoningEnabled !== undefined ? data.extendedReasoningEnabled : false); // 👈 DODAJ TĘ LINIĘ
           }
         }
       } catch (error) {
@@ -139,7 +152,8 @@ export default function ChatComponent() {
               timestamp: new Date(msg.createdAt),
               // Dodaj pole pdfUrl i documentId, jeśli istnieją w metadanych
               pdfUrl: msg.metadata && msg.metadata.hasPdf ? `/api/document/${msg.metadata.documentId}/pdf` : undefined,
-              documentId: msg.metadata && msg.metadata.documentId
+              documentId: msg.metadata && msg.metadata.documentId,
+              reasoning: msg.reasoning || undefined
             }));
             
             setMessages(formattedMessages);
@@ -350,6 +364,31 @@ export default function ChatComponent() {
     }
   };
 
+  const toggleExtendedReasoning = async () => {
+    try {
+      const newValue = !extendedReasoningEnabled;
+      
+      const response = await fetch('/api/user/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          extendedReasoningEnabled: newValue
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setExtendedReasoningEnabled(data.extendedReasoningEnabled);
+        }
+      }
+    } catch (error) {
+      console.error('Błąd podczas aktualizacji ustawień użytkownika:', error);
+    }
+  };
+
   const handleExcelContent = (content: string, metadata: any) => {
     // Upewnij się, że mamy aktywny czat
     if (!currentChatId) {
@@ -550,6 +589,7 @@ export default function ChatComponent() {
   let response = "";
   let pdfUrl = undefined;
   let documentId = undefined;
+  let reasoning = undefined;
   
   try {
     console.log("🔍 Sprawdzanie, czy zapytanie dotyczy generowania dokumentu...");
@@ -564,9 +604,16 @@ export default function ChatComponent() {
       pdfUrl = documentResult.pdfUrl;
       documentId = documentResult.documentId;
     } else {
-      // Standardowe zapytanie - użyj zwykłej funkcji odpowiedzi
       console.log("🔍 Standardowe zapytanie. Próba pobrania odpowiedzi z API OpenAI...");
-      response = await getAIResponseWithFallback(userInput);
+      const aiResult = await getAIResponseWithFallback(userInput);
+      
+      // Obsługa ExtendedResponse
+      if (typeof aiResult === 'string') {
+        response = aiResult;
+      } else {
+        response = aiResult.response;
+        reasoning = aiResult.reasoning; // Zachowaj proces myślowy
+      }
     }
     
     console.log("🔍 Otrzymano odpowiedź:", response);
@@ -583,7 +630,8 @@ export default function ChatComponent() {
         metadata: pdfUrl ? {
           hasPdf: true,
           documentId: documentId
-        } : undefined
+        } : undefined,
+        reasoning: reasoning || undefined
       }),
     });
     
@@ -618,7 +666,8 @@ export default function ChatComponent() {
       sender: 'bot',
       timestamp: new Date(),
       pdfUrl: pdfUrl,
-      documentId: documentId
+      documentId: documentId,
+      reasoning: reasoning
     };
     
     setMessages((prevMessages) => [...prevMessages, botMessage]);
@@ -627,35 +676,66 @@ export default function ChatComponent() {
 };
 
   // Funkcja pomocnicza do obsługi odpowiedzi z OpenAI
-const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
+const getAIResponseWithFallback = async (prompt: string): Promise<{
+  response: string;
+  reasoning?: { steps: ReasoningStep[]; finalAnswer: string };
+}> => {
   try {
     console.log("🔍 === START getAIResponseWithFallback ===");
     console.log("📋 Aktywne dokumenty:", activeDocumentIds);
     console.log("🌐 Wyszukiwanie web:", webSearchEnabled);
+    console.log("🧠 Rozszerzone myślenie:", extendedReasoningEnabled);
     
-    // 🔥 UPROSZCZENIE: Zawsze używaj głównej funkcji - ona sama pobierze dokumenty
     if (activeDocumentIds.length > 0) {
       console.log(`📚 Używam ${activeDocumentIds.length} aktywnych dokumentów z biblioteki wiedzy`);
-      return await getOpenAIResponseWithWebSearch(prompt, activeDocumentIds, webSearchEnabled);
+      const result = await getOpenAIResponseWithExtendedReasoning(
+        prompt, 
+        activeDocumentIds, 
+        webSearchEnabled,
+        extendedReasoningEnabled
+      );
+      return result;
     } 
-    // Fallback do starych dokumentów wczytanych bezpośrednio do czatu (kompatybilność wsteczna)
     else if (documentText && documentMetadata && documentChatId === currentChatId) {
       console.log("📄 Używam pojedynczego dokumentu jako fallback:", documentType, documentMetadata.title);
       
       if (documentType === 'pdf') {
-        return await analyzePdfWithOpenAI(documentText, documentMetadata, prompt, [], webSearchEnabled);
+        const result = await analyzePdfWithExtendedReasoning(
+          documentText, 
+          documentMetadata, 
+          prompt, 
+          [], 
+          webSearchEnabled,
+          extendedReasoningEnabled
+        );
+        return result;
       } else if (documentType === 'excel') {
-        return await analyzeExcelWithOpenAI(documentText, documentMetadata, prompt, [], webSearchEnabled);
+        const result = await analyzeExcelWithExtendedReasoning(
+          documentText, 
+          documentMetadata, 
+          prompt, 
+          [], 
+          webSearchEnabled,
+          extendedReasoningEnabled
+        );
+        return result;
       }
     }
     
-    // Standardowe zapytanie bez dokumentów
     console.log("💬 Używam standardowego zapytania bez dokumentów");
-    return await getOpenAIResponseWithWebSearch(prompt, [], webSearchEnabled);
+    const result = await getOpenAIResponseWithExtendedReasoning(
+      prompt, 
+      [], 
+      webSearchEnabled,
+      extendedReasoningEnabled
+    );
+    return result;
     
   } catch (error) {
     console.error("❌ Błąd w getAIResponseWithFallback:", error);
-    return "Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie za chwilę.";
+    return {
+      response: "Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie za chwilę."
+    };
   }
 };
 
@@ -1210,6 +1290,57 @@ const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
               </span>
             </button>
 
+            {/* Przycisk włączania/wyłączania rozszerzonego myślenia */}
+            <button
+              onClick={toggleExtendedReasoning}
+              title={extendedReasoningEnabled ? "Wyłącz rozszerzone myślenie" : "Włącz rozszerzone myślenie"}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 12px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: extendedReasoningEnabled ? 'rgba(168, 85, 247, 0.12)' : 'white',
+                border: extendedReasoningEnabled ? '1px solid rgba(168, 85, 247, 0.5)' : '1px solid #d1d5db',
+                cursor: 'pointer',
+                gap: '6px',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = extendedReasoningEnabled ? 'rgba(168, 85, 247, 0.7)' : '#a855f7';
+                e.currentTarget.style.backgroundColor = extendedReasoningEnabled ? 'rgba(168, 85, 247, 0.15)' : '#f9fafb';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = extendedReasoningEnabled ? 'rgba(168, 85, 247, 0.5)' : '#d1d5db';
+                e.currentTarget.style.backgroundColor = extendedReasoningEnabled ? 'rgba(168, 85, 247, 0.12)' : 'white';
+              }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke={extendedReasoningEnabled ? '#a855f7' : '#64748b'} 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <path d="M12 2L2 12l10 10 10-10L12 2z"/>
+                <path d="M12 6v6l4 4"/>
+              </svg>
+              <span style={{ 
+                fontSize: '14px', 
+                fontWeight: '400',
+                color: extendedReasoningEnabled ? '#7c3aed' : '#4b5563',
+                whiteSpace: 'nowrap'
+              }}>
+                Rozszerzone myślenie
+              </span>
+            </button>
+
             {/* Biblioteka Wiedzy - zastosuj ten sam styl czcionki */}
             <button
               onClick={() => setShowLibrary(true)}
@@ -1645,12 +1776,15 @@ const getAIResponseWithFallback = async (prompt: string): Promise<string> => {
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {message.text}
                     </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div>
-                    {message.text}
-                  </div>
-                )}
+                  {message.reasoning && (
+                    <ReasoningDisplay reasoning={message.reasoning} />
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {message.text}
+                </div>
+              )}
                 
                 {/* Dodaj ten kod dokładnie tutaj, po wyświetleniu tekstu wiadomości */}
                 {message.sender === 'bot' && message.pdfUrl && (

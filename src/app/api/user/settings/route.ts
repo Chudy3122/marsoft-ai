@@ -1,3 +1,4 @@
+// src/app/api/user/settings/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -14,7 +15,10 @@ export async function GET(request: NextRequest) {
     // Pobierz ustawienia użytkownika
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { webSearchEnabled: true }
+      select: { 
+        webSearchEnabled: true,
+        extendedReasoningEnabled: true // 👈 DODAJ TĘ LINIĘ
+      }
     });
     
     if (!user) {
@@ -23,7 +27,8 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      webSearchEnabled: user.webSearchEnabled
+      webSearchEnabled: user.webSearchEnabled,
+      extendedReasoningEnabled: user.extendedReasoningEnabled || false // 👈 DODAJ TĘ LINIĘ
     });
   } catch (error) {
     console.error('Błąd podczas pobierania ustawień użytkownika:', error);
@@ -40,22 +45,41 @@ export async function PUT(request: NextRequest) {
   
   try {
     const data = await request.json();
-    const { webSearchEnabled } = data;
+    const { webSearchEnabled, extendedReasoningEnabled } = data; // 👈 DODAJ extendedReasoningEnabled
     
-    // Sprawdź, czy parametr jest zdefiniowany
-    if (typeof webSearchEnabled !== 'boolean') {
+    // Przygotuj obiekt do aktualizacji
+    const updateData: any = {};
+    
+    // Sprawdź webSearchEnabled
+    if (typeof webSearchEnabled === 'boolean') {
+      updateData.webSearchEnabled = webSearchEnabled;
+    }
+    
+    // 👇 DODAJ TEN BLOK
+    // Sprawdź extendedReasoningEnabled
+    if (typeof extendedReasoningEnabled === 'boolean') {
+      updateData.extendedReasoningEnabled = extendedReasoningEnabled;
+    }
+    
+    // Sprawdź czy mamy coś do aktualizacji
+    if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'Nieprawidłowe parametry.' }, { status: 400 });
     }
     
     // Aktualizuj ustawienia użytkownika
     const user = await prisma.user.update({
       where: { email: session.user.email },
-      data: { webSearchEnabled }
+      data: updateData,
+      select: { 
+        webSearchEnabled: true,
+        extendedReasoningEnabled: true // 👈 DODAJ TĘ LINIĘ
+      }
     });
     
     return NextResponse.json({
       success: true,
-      webSearchEnabled: user.webSearchEnabled
+      webSearchEnabled: user.webSearchEnabled,
+      extendedReasoningEnabled: user.extendedReasoningEnabled // 👈 DODAJ TĘ LINIĘ
     });
   } catch (error) {
     console.error('Błąd podczas aktualizacji ustawień użytkownika:', error);

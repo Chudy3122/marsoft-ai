@@ -840,51 +840,43 @@ export async function handleDocumentGeneration(
   prompt: string,
   chatId: string
 ): Promise<{ text: string; pdfUrl?: string; documentId?: string }> {
-  // Rozbudowany zestaw wzorców do wykrywania żądań generowania dokumentów
+  // 🔥 NAPRAWIONE WZORCE - bardziej precyzyjne wykrywanie
   const generateDocumentPatterns = [
-    // Wzorce bezpośrednio związane z dokumentami
-    /wygeneruj (?:dla mnie )?(?:dokument|pdf|plik pdf|raport)/i,
-    /(?:stwórz|utwórz|przygotuj|zrób)(?:\s+dla\s+mnie)?\s+(?:dokument|pdf|plik pdf|raport)/i,
-    /(?:zrób|wygeneruj|stwórz) (?:dla mnie )?(?:pdf|plik pdf|dokument pdf)/i,
-    /(?:zapisz|wyeksportuj)(?:\s+to)?\s+(?:jako|do|w)?\s+(?:pdf|dokument|pliku)/i,
-    /(?:zrób|utwórz)(?:\s+z\s+tego)?\s+(?:dokument|pdf|plik)/i,
-    /(?:sporządź|generuj|wykonaj)(?:\s+dla\s+mnie)?\s+(?:dokument|raport|pdf)/i,
+    // TYLKO bezpośrednie polecenia generowania dokumentów
+    /(?:wygeneruj|stwórz|przygotuj|utwórz|zrób)\s+(?:dla\s+mnie\s+)?(?:dokument|pdf|plik\s+pdf|raport)/i,
+    /(?:zapisz|wyeksportuj)(?:\s+to)?\s+(?:jako|do|w)\s+(?:pdf|dokument|plik)/i,
+    /(?:sporządź|generuj|wykonaj)\s+(?:dla\s+mnie\s+)?(?:dokument|raport|pdf)/i,
     
-    // Wzorce z listy, tabelą itp.
-    /(?:stwórz|przygotuj|wygeneruj)(?:\s+dla\s+mnie)?\s+(?:listę|zestawienie|tabelę|wykaz)/i,
-    /(?:zrób|utwórz|stwórz)(?:\s+dla\s+mnie)?\s+(?:listę|zestawienie|tabelę|wykaz|podsumowanie)/i,
+    // Bezpośrednie żądania z listami/tabelami + polecenie tworzenia
+    /(?:stwórz|przygotuj|wygeneruj)\s+(?:dla\s+mnie\s+)?(?:listę|zestawienie|tabelę|wykaz)/i,
+    /(?:zrób|utwórz|stwórz)\s+(?:dla\s+mnie\s+)?(?:listę|zestawienie|tabelę|wykaz|podsumowanie)/i,
     
-    // Wzorce z dokumentami specyficznymi
-    /(?:przygotuj|wygeneruj|stwórz)(?:\s+dla\s+mnie)?\s+(?:ofertę|umowę|sprawozdanie|analizę)/i,
-    /(?:napisz|przygotuj)(?:\s+dla\s+mnie)?\s+(?:protokół|zarys|kosztorys|specyfikację)/i,
+    // Formalne dokumenty + polecenie tworzenia
+    /(?:przygotuj|wygeneruj|stwórz)\s+(?:dla\s+mnie\s+)?(?:ofertę|umowę|sprawozdanie|analizę)/i,
+    /(?:napisz|przygotuj)\s+(?:dla\s+mnie\s+)?(?:protokół|zarys|kosztorys|specyfikację)/i,
     
-    // Wzorce z frazami formalnymi
-    /(?:uprzejmie\s+proszę\s+o\s+przygotowanie|czy\s+mógłbyś\s+przygotować)(?:\s+dla\s+mnie)?\s+(?:dokumentu|raportu|pliku|pdf)/i,
-    /(?:potrzebuję|chciałbym)(?:\s+otrzymać)?\s+(?:dokument|raport|plik pdf|zestawienie)/i
+    // Grzeczne prośby o dokumenty
+    /(?:uprzejmie\s+proszę\s+o\s+przygotowanie|czy\s+mógłbyś\s+przygotować)\s+(?:dla\s+mnie\s+)?(?:dokumentu|raportu|pliku|pdf)/i,
+    /(?:potrzebuję|chciałbym)\s+(?:otrzymać\s+)?(?:dokument|raport|plik\s+pdf|zestawienie)/i,
+    
+    // 🔥 DODAJ: Bezpośrednie polecenia z PDF
+    /(?:zrób|wygeneruj|stwórz)\s+(?:dla\s+mnie\s+)?(?:pdf|plik\s+pdf|dokument\s+pdf)/i
   ];
   
   // Sprawdź, czy zapytanie pasuje do któregokolwiek z wzorców
   let isDocumentRequest = generateDocumentPatterns.some(pattern => pattern.test(prompt));
   
-  // Dodatkowe sprawdzanie kontekstowe dla prostszych fraz
+  // 🔥 USUŃ TĘ CZĘŚĆ - była zbyt liberalna:
+  // Usunięto sprawdzanie kontekstowe dla prostszych fraz
+  
+  // 🔥 DODAJ: Tylko jeśli zawiera wyraźne słowa kluczowe generowania
   if (!isDocumentRequest) {
-    const simplePatterns = [
-      /(?:lista|zestawienie|tabela|wykaz|spis)/i,
-      /(?:raport|pdf|dokument)/i,
-      /(?:podsumowanie|analiza)/i
-    ];
+    // Sprawdź tylko bardzo wyraźne przypadki
+    const explicitGenerationWords = /(?:wygeneruj|stwórz|przygotuj|utwórz|zrób|sporządź|napisz|wykonaj)/i;
+    const documentWords = /(?:dokument|pdf|raport|lista|zestawienie|tabela|wykaz|oferta|umowa|protokół)/i;
     
-    const documentContextPatterns = [
-      /(?:osób|ludzi|personelu|pracowników|uczestników)/i,
-      /(?:projekt|ue|unii|europejski|regionalny)/i,
-      /(?:zadań|kosztów|wydatków|harmonogram)/i
-    ];
-    
-    const hasSimplePattern = simplePatterns.some(pattern => pattern.test(prompt));
-    const hasContextPattern = documentContextPatterns.some(pattern => pattern.test(prompt));
-    
-    if (hasSimplePattern && hasContextPattern) {
-      console.log("Wykryto kontekstowe żądanie dokumentu:", prompt);
+    if (explicitGenerationWords.test(prompt) && documentWords.test(prompt)) {
+      console.log("Wykryto wyraźne żądanie generowania dokumentu:", prompt);
       isDocumentRequest = true;
     }
   }
