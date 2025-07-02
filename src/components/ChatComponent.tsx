@@ -1392,9 +1392,154 @@ const getAIResponseWithFallback = async (prompt: string): Promise<{
               </span>
             </button>
 
+            {/* BEZPOŚREDNIE INPUTY - DODAJ TO PRZED PRZYCISKAMI */}
+            <input
+              id="pdf-upload-direct"
+              type="file"
+              accept="application/pdf"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                if (file.type !== 'application/pdf') {
+                  alert('Proszę wybrać plik PDF.');
+                  return;
+                }
+                
+                try {
+                  console.log('📄 Wczytuję PDF:', file.name);
+                  
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  
+                  const response = await fetch('/api/process-pdf', {
+                    method: 'POST',
+                    body: formData
+                  });
+                  
+                  if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Błąd podczas przetwarzania pliku');
+                  }
+                  
+                  const data = await response.json();
+                  console.log('✅ PDF przetworzony:', data);
+                  
+                  // Wywołaj handlePdfContent jeśli istnieje
+                  if (typeof handlePdfContent === 'function') {
+                    handlePdfContent(data.text, data.metadata);
+                  } else {
+                    console.log('📄 Treść PDF:', data.text.substring(0, 200) + '...');
+                    alert('PDF wczytany pomyślnie! (sprawdź konsolę)');
+                  }
+                  
+                  // Reset input
+                  (e.target as HTMLInputElement).value = '';
+                } catch (err) {
+                  // 🔥 NAPRAWIONY błąd TypeScript - proper error handling
+                  console.error('❌ Błąd PDF:', err);
+                  const errorMessage = err instanceof Error ? err.message : 'Nieznany błąd';
+                  alert(`Błąd podczas wczytywania PDF: ${errorMessage}`);
+                }
+              }}
+            />
+
+            <input
+              id="excel-upload-direct"
+              type="file"
+              accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                try {
+                  console.log('📊 Wczytuję Excel:', file.name);
+                  
+                  // Import XLSX dynamically
+                  const XLSX = await import('xlsx');
+                  
+                  const arrayBuffer = await file.arrayBuffer();
+                  const workbook = XLSX.read(arrayBuffer, {
+                    type: 'array',
+                    cellDates: true,
+                    cellStyles: true,
+                    cellNF: true,
+                  });
+
+                  const sheetNames = workbook.SheetNames;
+                  // 🔥 NAPRAWIONY błąd TypeScript - proper typing
+                  const allSheetsData: Record<string, any> = {};
+                  let allSheetsText = '';
+                  let totalRows = 0;
+                  let totalColumns = 0;
+                  
+                  sheetNames.forEach(sheetName => {
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    allSheetsData[sheetName] = jsonData;
+                    
+                    if (jsonData.length > 0) {
+                      totalRows += jsonData.length;
+                      for (const row of jsonData) {
+                        if (Array.isArray(row) && row.length > totalColumns) {
+                          totalColumns = row.length;
+                        }
+                      }
+                    }
+                    
+                    allSheetsText += `# Arkusz: ${sheetName}\n\n`;
+                    const csvData = XLSX.utils.sheet_to_csv(worksheet);
+                    allSheetsText += csvData + '\n\n';
+                  });
+
+                  const metadata = {
+                    title: file.name,
+                    size: file.size,
+                    type: file.type,
+                    sheetNames: sheetNames,
+                    sheetCount: sheetNames.length,
+                    totalRows: totalRows,
+                    totalColumns: totalColumns,
+                    lastModified: new Date(file.lastModified).toISOString(),
+                    data: allSheetsData
+                  };
+
+                  console.log('✅ Excel przetworzony:', metadata);
+                  
+                  // Wywołaj handleExcelContent jeśli istnieje
+                  if (typeof handleExcelContent === 'function') {
+                    handleExcelContent(allSheetsText, metadata);
+                  } else {
+                    console.log('📊 Treść Excel:', allSheetsText.substring(0, 200) + '...');
+                    alert('Excel wczytany pomyślnie! (sprawdź konsolę)');
+                  }
+                  
+                  // Reset input
+                  (e.target as HTMLInputElement).value = '';
+                } catch (err) {
+                  // 🔥 NAPRAWIONY błąd TypeScript - proper error handling
+                  console.error('❌ Błąd Excel:', err);
+                  const errorMessage = err instanceof Error ? err.message : 'Nieznany błąd';
+                  alert(`Błąd podczas wczytywania Excel: ${errorMessage}`);
+                }
+              }}
+            />
+
             {/* Wgraj PDF - przycisk akcji z jasno zielonym tłem */}
             <button
-              onClick={() => {/* Aktywuj wgrywanie PDF */}}
+              onClick={() => {
+                console.log('🖱️ Kliknięto przycisk PDF');
+                const input = document.getElementById('pdf-upload-direct') as HTMLInputElement;
+                if (input) {
+                  console.log('✅ Znaleziono input PDF, klikam...');
+                  input.click();
+                } else {
+                  console.error('❌ Nie znaleziono input PDF');
+                }
+              }}
               title="Wgraj PDF"
               style={{
                 display: 'flex',
@@ -1445,7 +1590,16 @@ const getAIResponseWithFallback = async (prompt: string): Promise<{
 
             {/* Wgraj XLS - przycisk taki sam jak Biblioteka Wiedzy */}
             <button
-              onClick={() => {/* Aktywuj wgrywanie XLS */}}
+              onClick={() => {
+                console.log('🖱️ Kliknięto przycisk Excel');
+                const input = document.getElementById('excel-upload-direct') as HTMLInputElement;
+                if (input) {
+                  console.log('✅ Znaleziono input Excel, klikam...');
+                  input.click();
+                } else {
+                  console.error('❌ Nie znaleziono input Excel');
+                }
+              }}
               title="Wgraj XLS"
               style={{
                 display: 'flex',
