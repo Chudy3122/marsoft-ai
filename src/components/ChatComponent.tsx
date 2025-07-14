@@ -963,11 +963,16 @@ export default function ChatComponent() {
         
         .chat-container {
           animation: slideInRight 0.8s ease-out;
+          z-index: 1;
         }
+        
         
         .message-item {
           animation: fadeInUp 0.6s ease-out forwards;
           opacity: 0;
+          position: relative;
+          z-index: 1;
+          pointer-events: none;
         }
         
         .ai-particle {
@@ -2206,43 +2211,54 @@ export default function ChatComponent() {
                 {/* MENU DROPDOWN */}
                 {showUserMenu && (
                   <>
+                    {/* Overlay do zamykania menu - BARDZO WYSOKI Z-INDEX */}
                     <div 
                       style={{
-                        position: 'fixed',
+                        position: 'fixed', // FIXED zamiast absolute!
                         top: 0,
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        zIndex: 99998,
-                        background: 'transparent'
+                        zIndex: 2147483647, // BARDZO wysoki!
+                        background: 'rgba(0, 0, 0, 0.1)', // Lekkie przyciemnienie żeby zobaczyć czy działa
+                        pointerEvents: 'auto'
                       }}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        console.log('🔥 OVERLAY CLICKED - Closing menu');
                         setShowUserMenu(false);
                       }}
                     />
                     
-                    <div style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 8px)',
-                      right: '0',
-                      backgroundColor: 'rgba(26, 26, 26, 0.98)',
-                      backdropFilter: 'blur(20px)',
-                      boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
-                      borderRadius: '12px',
-                      width: '220px',
-                      zIndex: 99999,
-                      border: '1px solid rgba(163, 205, 57, 0.3)',
-                      overflow: 'hidden',
-                      pointerEvents: 'auto',
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none'
-                    }}>
+                    {/* Menu dropdown - RENDEROWANE JAKO PORTAL W BODY */}
+                    <div 
+                      style={{
+                        position: 'fixed', // FIXED zamiast absolute!
+                        top: '60px', // Stała pozycja od góry
+                        right: '20px', // Stała pozycja od prawej
+                        backgroundColor: 'rgba(26, 26, 26, 0.98)',
+                        backdropFilter: 'blur(20px)',
+                        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+                        borderRadius: '12px',
+                        width: '220px',
+                        zIndex: 999999, // NAJWYŻSZY MOŻLIWY Z-INDEX!
+                        border: '1px solid rgba(163, 205, 57, 0.3)',
+                        overflow: 'visible', // VISIBLE zamiast hidden!
+                        pointerEvents: 'auto',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        // Dodane dla pewności:
+                        isolation: 'isolate', // Tworzy nowy stacking context
+                        transform: 'translateZ(0)', // Force hardware acceleration
+                      }}
+                    >
+                      {/* Sekcja informacji o użytkowniku */}
                       <div style={{
                         padding: '16px',
                         borderBottom: '1px solid rgba(163, 205, 57, 0.2)',
-                        fontSize: '14px'
+                        fontSize: '14px',
+                        pointerEvents: 'auto'
                       }}>
                         <div style={{ fontWeight: 600, color: 'white' }}>
                           {session?.user?.name || 'Użytkownik'}
@@ -2252,29 +2268,67 @@ export default function ChatComponent() {
                         </div>
                       </div>
                       
-                      <div
-                        onClick={(e) => {
+                      {/* Przycisk wylogowania */}
+                      <button
+                        type="button"
+                        onClick={async (e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           
-                          console.log('🔥 LOGOUT CLICKED!');
+                          console.log('🔥 LOGOUT BUTTON CLICKED!');
+                          console.log('Event target:', e.target);
+                          console.log('Current target:', e.currentTarget);
+                          
+                          // Zamknij menu od razu
                           setShowUserMenu(false);
                           
-                          setTimeout(async () => {
+                          try {
+                            console.log('🔄 Calling signOut with session:', session);
+                            
+                            // NOWA METODA - próba różnych sposobów wylogowania
+                            const result = await signOut({ 
+                              callbackUrl: '/login',
+                              redirect: false // Nie przekierowuj automatycznie
+                            });
+                            
+                            console.log('✅ SignOut result:', result);
+                            
+                            // Ręczne przekierowanie
+                            window.location.href = '/login';
+                            
+                          } catch (error) {
+                            console.error('❌ Błąd podczas wylogowania:', error);
+                            
+                            // MEGA FALLBACK
                             try {
-                              if (typeof signOut === 'function') {
-                                await signOut({ 
-                                  callbackUrl: '/login',
-                                  redirect: true 
+                              // Wyczyść wszystko
+                              if (typeof window !== 'undefined') {
+                                // Wyczyść localStorage i sessionStorage
+                                localStorage.clear();
+                                sessionStorage.clear();
+                                
+                                // Wyczyść wszystkie cookies
+                                document.cookie.split(";").forEach((c) => {
+                                  document.cookie = c
+                                    .replace(/^ +/, "")
+                                    .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
                                 });
-                              } else {
-                                window.location.href = '/login';
+                                
+                                // Wyczyść też cookies next-auth specjalnie
+                                const authCookies = ['next-auth.session-token', 'next-auth.callback-url', 'next-auth.csrf-token'];
+                                authCookies.forEach(cookieName => {
+                                  document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+                                });
                               }
-                            } catch (error) {
-                              console.error('Błąd wylogowania:', error);
-                              window.location.href = '/login';
+                              
+                              console.log('🔄 Manual cleanup done, redirecting...');
+                              window.location.replace('/login'); // replace zamiast href
+                              
+                            } catch (fallbackError) {
+                              console.error('❌ Fallback failed, reloading page:', fallbackError);
+                              window.location.reload();
                             }
-                          }, 100);
+                          }
                         }}
                         style={{
                           display: 'flex',
@@ -2289,19 +2343,31 @@ export default function ChatComponent() {
                           gap: '10px',
                           border: 'none',
                           outline: 'none',
-                          pointerEvents: 'auto',
+                          textAlign: 'left',
+                          pointerEvents: 'auto', // WAŻNE!
                           userSelect: 'none',
                           WebkitUserSelect: 'none',
                           position: 'relative',
-                          zIndex: 1
+                          zIndex: 1000000, // JESZCZE WYŻSZY!
+                          // Dodane:
+                          touchAction: 'manipulation', // Dla mobile
+                          WebkitTapHighlightColor: 'transparent'
                         }}
                         onMouseEnter={(e) => {
+                          console.log('🖱️ Mouse enter logout button');
                           e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
                           e.currentTarget.style.color = '#ff5555';
                         }}
                         onMouseLeave={(e) => {
+                          console.log('🖱️ Mouse leave logout button');
                           e.currentTarget.style.backgroundColor = 'transparent';
                           e.currentTarget.style.color = '#ef4444';
+                        }}
+                        onMouseDown={(e) => {
+                          console.log('🖱️ Mouse down on logout button');
+                        }}
+                        onMouseUp={(e) => {
+                          console.log('🖱️ Mouse up on logout button');
                         }}
                       >
                         <svg 
@@ -2314,14 +2380,22 @@ export default function ChatComponent() {
                           strokeWidth="2" 
                           strokeLinecap="round" 
                           strokeLinejoin="round"
-                          style={{ flexShrink: 0 }}
+                          style={{ 
+                            flexShrink: 0,
+                            pointerEvents: 'none' // SVG nie blokuje kliknięć
+                          }}
                         >
                           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                           <polyline points="16 17 21 12 16 7"></polyline>
                           <line x1="21" y1="12" x2="9" y2="12"></line>
                         </svg>
-                        <span style={{ flexGrow: 1 }}>Wyloguj się</span>
-                      </div>
+                        <span style={{ 
+                          flexGrow: 1,
+                          pointerEvents: 'none' // Span nie blokuje kliknięć
+                        }}>
+                          Wyloguj się
+                        </span>
+                      </button>
                     </div>
                   </>
                 )}
